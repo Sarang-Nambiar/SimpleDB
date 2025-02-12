@@ -10,10 +10,16 @@ import java.util.Iterator;
  * with the data for each field.
  * 
  * Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
- * `Field`: interface that different data types
+ * `Field`: interface that different data types implement
  * Tuples have a type/schema represented by `TupleDesc` object
  * `TupleDesc` object consists of a collection of `Type` objects, one per field in the tuple
  * `Type`: Describes the type of the corresponding field
+ * 
+ * Now: fails modifyRecordId. Is it required?
+ * 
+ * modifyRecordId() test failed due to " +
+   "RecordId.equals() not being implemented.  This is not required for Lab 1, " +
+   "but should pass when you do implement the RecordId class."
  */
 public class Tuple implements Serializable {
 
@@ -47,7 +53,7 @@ public class Tuple implements Serializable {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        // done(?)
+        // code already provided. done(?), get the TupleDesc (td) so just return it
         return this.td;
         // return null;
     }
@@ -61,7 +67,7 @@ public class Tuple implements Serializable {
     public RecordId getRecordId() {
         // some code goes here
         // return null;
-        // done(?)
+        // code already provided. done(?), get the RecordID (recordId) so just return it
         return this.recordId;
     }
 
@@ -75,7 +81,7 @@ public class Tuple implements Serializable {
      */
     public void setRecordId(RecordId rid) {
         // some code goes here
-        // done(?)
+        // code already provided. done(?) set the RecordID (recordId) so just set it
         this.recordId = rid;
     }
 
@@ -91,6 +97,7 @@ public class Tuple implements Serializable {
      */
     public void setField(int i, Field f) {
         // some code goes here
+        // Recall: Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
         this.fields[i] = f;
     }
 
