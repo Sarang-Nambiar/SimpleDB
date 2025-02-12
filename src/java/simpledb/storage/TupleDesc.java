@@ -19,7 +19,7 @@ import java.util.*;
  * 
  * 
  * Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
- * `Field`: interface that different data types
+ * `Field`: interface that different data types implement
  * Tuples have a type/schema represented by `TupleDesc` object
  * `TupleDesc` object consists of a collection of `Type` objects, one per field in the tuple
  * `Type`: Describes the type of the corresponding field
@@ -28,6 +28,12 @@ import java.util.*;
  * 
  * Serializable -> Interface that specifies class is serializable: Convert the class instance/object
  * into a format which can be written to a disk
+ * 
+ * 
+ * 
+ * TO DO
+ * - Check what other error handling is needed. Confused parts: see both TupleDesc constructors
+ * - or is it only those specified in the function header and test cases provided
  */
 public class TupleDesc implements Serializable {
 
@@ -112,6 +118,20 @@ public class TupleDesc implements Serializable {
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
 
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - Length of typeAr==0 or fieldAr==0. CLARIFY. if required, add error handling for merge
+         * - Length of typeAr != Length of fieldArr. I think this one's okay
+         */
+        if(typeAr.length==0 || fieldAr.length==0) {
+            throw new IllegalArgumentException("Type Array and Field Array must contain at least 1 entry");
+        }
+        if(typeAr.length!=fieldAr.length) {
+            throw new IllegalArgumentException("Type Array and Field Array must be the same length");
+        }
+
+
         // Constructor for TupleDesc class
         // Initialize the array to store the field TDItems
         this.TDItems = new ArrayList<TDItem>();
@@ -122,6 +142,8 @@ public class TupleDesc implements Serializable {
             this.TDItems.add(tditem);
         }
     }
+
+
 
 
 
@@ -136,6 +158,16 @@ public class TupleDesc implements Serializable {
     public TupleDesc(Type[] typeAr) {
         // some code goes here
 
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - Length of typeAr==0 or is it ok. CLARIFY. if required, add error handling for merge
+         */
+        if(typeAr.length==0) {
+            throw new IllegalArgumentException("Type Array must contain at least 1 entry");
+        }
+
+
         // Constructor overloading
         this.TDItems = new ArrayList<TDItem>();
         // Create the TDItems with the specified types and null name
@@ -144,6 +176,8 @@ public class TupleDesc implements Serializable {
             this.TDItems.add(tditem);
         }
     }
+
+
 
 
 
@@ -161,6 +195,7 @@ public class TupleDesc implements Serializable {
 
 
 
+
     /**
      * Gets the (possibly null) field name of the ith field of this TupleDesc.
      * 
@@ -173,10 +208,22 @@ public class TupleDesc implements Serializable {
     public String getFieldName(int i) throws NoSuchElementException {
         // some code goes here
 
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds (See the @throws above the function header hint)
+         */
+        if(i<0 || i>this.numFields()-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
         // Get the ith element, and then use the fieldName property of the ith element 
         return this.TDItems.get(i).fieldName;
         //return null;
     }
+
+
 
 
 
@@ -193,10 +240,22 @@ public class TupleDesc implements Serializable {
     public Type getFieldType(int i) throws NoSuchElementException {
         // some code goes here
 
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds (See the @throws above the function header hint)
+         */
+        if(i<0 || i>this.numFields()-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
         // Get the ith element, and then use the fieldType property of the ith element 
         return this.TDItems.get(i).fieldType;
         //return null;
     }
+
+
 
 
 
@@ -212,7 +271,11 @@ public class TupleDesc implements Serializable {
     public int fieldNameToIndex(String name) throws NoSuchElementException {
         // some code goes here
 
-        // See TupleDescTest.java
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         */
+        // See TupleDescTest.java 
         if(name==null) {
             throw new NoSuchElementException("null name provided");
         }
@@ -232,6 +295,7 @@ public class TupleDesc implements Serializable {
 
     
 
+
     /**
      * @return The size (in bytes) of tuples corresponding to this TupleDesc.
      *         Note that tuples from a given TupleDesc are of a fixed size.
@@ -247,6 +311,8 @@ public class TupleDesc implements Serializable {
         return size;
         //return 0;
     }
+
+
 
 
 
@@ -284,6 +350,8 @@ public class TupleDesc implements Serializable {
 
 
 
+
+
     /**
      * Compares the specified object with this TupleDesc for equality. Two
      * TupleDescs are considered equal if they have the same number of items
@@ -311,7 +379,7 @@ public class TupleDesc implements Serializable {
         }
 
         // Check if both TDItems have the same types for every element 
-        // i-th types are all equal
+        // i.e. i-th types are all equal
         for(int i=0; i < this.numFields(); i++){
             if(!this.getFieldType(i).equals(td2.getFieldType(i))){
                 return false;
@@ -323,11 +391,15 @@ public class TupleDesc implements Serializable {
 
 
 
+
+
     public int hashCode() {
         // If you want to use TupleDesc as keys for HashMap, implement this so
         // that equal objects have equals hashCode() results
         throw new UnsupportedOperationException("unimplemented");
     }
+
+
 
 
 

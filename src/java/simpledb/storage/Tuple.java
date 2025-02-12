@@ -3,6 +3,7 @@ package simpledb.storage;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 /**
  * Tuple maintains information about the contents of a tuple. Tuples have a
@@ -15,11 +16,16 @@ import java.util.Iterator;
  * `TupleDesc` object consists of a collection of `Type` objects, one per field in the tuple
  * `Type`: Describes the type of the corresponding field
  * 
- * Now: fails modifyRecordId. Is it required?
  * 
- * modifyRecordId() test failed due to " +
+ * 
+ * TO DO
+ * - Check if modifyRecordId is required because it fails.
+ * - modifyRecordId() test failed due to " +
    "RecordId.equals() not being implemented.  This is not required for Lab 1, " +
    "but should pass when you do implement the RecordId class."
+ *
+ * 
+ * 
  */
 public class Tuple implements Serializable {
 
@@ -48,6 +54,8 @@ public class Tuple implements Serializable {
 
 
 
+
+
     /**
      * @return The TupleDesc representing the schema of this tuple.
      */
@@ -57,6 +65,8 @@ public class Tuple implements Serializable {
         return this.td;
         // return null;
     }
+
+
 
 
 
@@ -70,6 +80,8 @@ public class Tuple implements Serializable {
         // code already provided. done(?), get the RecordID (recordId) so just return it
         return this.recordId;
     }
+
+
 
 
 
@@ -87,6 +99,8 @@ public class Tuple implements Serializable {
 
 
 
+
+
     /**
      * Change the value of the ith field of this tuple.
      *
@@ -97,9 +111,21 @@ public class Tuple implements Serializable {
      */
     public void setField(int i, Field f) {
         // some code goes here
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds
+         */
+        if(i<0 || i>this.fields.length-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
         // Recall: Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
         this.fields[i] = f;
     }
+
+
 
 
 
@@ -111,12 +137,24 @@ public class Tuple implements Serializable {
      */
     public Field getField(int i) {
         // some code goes here
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds
+         */
+        if(i<0 || i>this.fields.length-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
         return this.fields[i];
         // return null;
     }
 
 
 
+
+    
     /**
      * Returns the contents of this Tuple as a string. Note that to pass the
      * system tests, the format needs to be as follows:
