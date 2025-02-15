@@ -34,6 +34,7 @@ import java.util.*;
  * TO DO
  * - Check what other error handling is needed. Confused parts: see both TupleDesc constructors
  * - or is it only those specified in the function header and test cases provided
+ * - See requirements from the classes that depend on it
  */
 public class TupleDesc implements Serializable {
 

@@ -19,6 +19,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * user program before it can be used -- eventually, this should be converted
  * to a catalog that reads a catalog table from disk.
  * 
+ * The Catalog (singleton) object manages adding new tables and viewing schemas and primary keys
+ * 
+ * Catalog class consists of a list of the tables and schemas of the tables that are in 
+ * the database
+ * 
+ * Need to write code to add a new table and get information about a particular table
+ * 
+ * Each table has an associated TupleDesc object that allows operators to determine the 
+ * types and number of fields in a table
+ * 
+ * The global catalog is a single instance of Catalog that is allocated for the entire SimpleDB process
+ * Can be retrieved via Database.getCatalog()
+ * 
  * @Threadsafe
  */
 public class Catalog {
