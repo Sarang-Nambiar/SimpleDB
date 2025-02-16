@@ -205,10 +205,10 @@ public class TupleDesc implements Serializable {
         return true;
     }
 
-    public int hashCode() {
+    public int hashCode()  {
         // If you want to use TupleDesc as keys for HashMap, implement this so
         // that equal objects have equals hashCode() results
-        return 0;
+        throw new UnsupportedOperationException("Implement this");
     }
 
     /**
