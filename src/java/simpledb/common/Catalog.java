@@ -32,6 +32,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * The global catalog is a single instance of Catalog that is allocated for the entire SimpleDB process
  * - Can be retrieved via Database.getCatalog()
  * 
+ * 
+ * Tuples are stored in pages, which are stored on disk. Pages belonging to the 
+ * same table are grouped together under the same DbFile instance, which 
+ * provides an interface to read/write pages and tuples to disk. 
+ * Each database table is stored as a DbFile instance.
+ * DbFile Interface (aka table) -> Page 1...Page N. Each entry in a page is a tuple
+ * Each column is a field
+ * 
+ * 
+ * 
  * @Threadsafe
  */
 public class Catalog {

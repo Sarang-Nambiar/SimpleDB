@@ -20,6 +20,40 @@ import java.util.concurrent.ConcurrentHashMap;
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
  * 
+ * 
+ * Tuples are stored in pages, which are stored on disk. Pages belonging to the 
+ * same table are grouped together under the same DbFile instance, which 
+ * provides an interface to read/write pages and tuples to disk. 
+ * Each database table is stored as a DbFile instance.
+ * DbFile Interface (aka table) -> Page 1...Page N. Each entry in a page is a tuple
+ * Each column is a field
+ * 
+ * 
+ * The BufferPool singleton object manages all page access and modifications. 
+ * Because BufferPool has a global view of all page accesses, it can cache 
+ * frequently used pages in memory so that page fetches doesn’t always go to disk. 
+ * Once the BufferPool cache gets full, it will need to evict pages using some 
+ * eviction algorithm. The BufferPool evicts pages using the no-steal algorithm to 
+ * provide ACID transaction guarantees, which is discussed more in the Transactions 
+ * section
+ * 
+ * 
+ * BufferPool is responsible for caching pages in memory that have been 
+ * recently read from disk. 
+ * All operators read and write pages from various files on disk through the 
+ * buffer pool. It consists of a fixed number of pages, defined by the `numPages` 
+ * parameter to the `BufferPool` constructor. 
+ * In later labs, you will implement an eviction policy. 
+ * 
+ * 
+ * For this lab, you only need to implement the constructor and the 
+ * `BufferPool.getPage()` method used by the SeqScan operator. 
+ * The BufferPool should store up to `numPages` pages. For this lab, 
+ * if more than `numPages` requests are made for different pages, then 
+ * instead of implementing an eviction policy, you may throw a DbException. 
+ * In future labs you will be required to implement an eviction policy.
+ * 
+ * 
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
@@ -33,6 +67,17 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    // BufferPool should use the numPages argument to the
+    // constructor
+    private int numPages; 
+    private ConcurrentHashMap<PageId, Page> pageIdToPage;
+
+    // Define a simple intrinsic lock: Recall, every Java object
+    // can implictly act as a lock for purposes of synchronisation
+    // Intrinsic locks act as mutexes (mutual exclusion locks)
+    // At most 1 thread may own the lock
+    private static Object simpleLock = new Object();
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +85,7 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.numPages = numPages;
     }
     
     public static int getPageSize() {
@@ -74,7 +120,38 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+
+        // Try to acquire a lock to run critical section code that may access
+        // shared resources
+        // https://www.baeldung.com/java-mutex
+        synchronized(simpleLock) {
+            // The retrieved page should be looked up in the buffer pool. If it is present, it should be returned
+            if(this.pageIdToPage.containsKey(pid)) {
+                return this.pageIdToPage.get(pid);
+            // If it is not present, it should be added to the buffer pool and returned.
+            } else {
+                // If there is insufficient space in the buffer pool
+                // For this lab, if more than `numPages` requests are made for different pages, then 
+                // instead of implementing an eviction policy, you may throw a DbException. 
+                if(this.pageIdToPage.size()>=this.numPages){
+                    throw new DbException("More than `numPages` requests have been made for different pages");
+                } else {
+                    // See PageId.java. Return the unique tableid hashcode of this PageId
+                    int tableId = pid.getTableId(); 
+                    // See Catalog.java. Get the Database file using the table id
+                    // Returns the DbFile that can be used to read the contents of the specified table.
+                    DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+                    // See DbFile.java. Read the Page from the Database file. 
+                    // Read the specified page from disk.
+                    // Hint for lab1: You should use the DbFile.readPage method to access pages of a DbFile.
+                    Page page = dbFile.readPage(pid);
+                    // Add to the buffer pool
+                    this.pageIdToPage.put(pid, page);
+                    return page;
+                }
+            }
+        }
+        // return null;
     }
 
     /**
