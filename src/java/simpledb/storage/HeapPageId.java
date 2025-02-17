@@ -34,7 +34,7 @@ import java.util.Objects;
  * Each page consists of one or more bytes representing the
  * - header
  * - page_size bytes of actual page content: page_size*8 (in bits)
- * Each tuple requires tuple_size*8 bits for its content and 1 bit for the header: tuple_size * 8 + 1 (in bits)
+ * Each tuple requires tuple_size*8 bits for its content and 1 bit for the header: tuple_size * 8 + 1 (in bits) -> 1 bit for header to indicate if it is valid or invalid
  * Therefore, the number of tuples that can fit in a single page is
  * tuples_per_page = floor((page_size * 8) / (tuple_size * 8 + 1))
  * Each tuple requires one additional bit of storage in the header
@@ -42,7 +42,7 @@ import java.util.Objects;
  * Number of bytes required to store the header is:
  * headerBytes = ceiling(tuples_per_page/8)
  * - Each tuple is assumed to require one bit of storage
- * - So total number of tuple bits, divided by 8 to get the bytes
+ * - Take the total number of tuples, divided by 8, to get the bytes
  * 
  * Least Significant Bit of each byte represents status of slots in the file
  * Lowest bit of the first byte: First slot in page is in use or not
