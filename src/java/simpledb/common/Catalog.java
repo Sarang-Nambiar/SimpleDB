@@ -3,6 +3,7 @@ package simpledb.common;
 import simpledb.common.Type;
 import simpledb.storage.DbFile;
 import simpledb.storage.HeapFile;
+import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
 
 import java.io.BufferedReader;
@@ -23,12 +24,39 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Catalog {
 
+    private class Table {
+
+        private DbFile file;
+        private String name; // Table name
+        private String pkeyField;
+
+        public Table(DbFile file, String name, String pkey) {
+            this.file = file;
+            this.name = name;
+            this.pkeyField = pkey;
+        }
+
+        public DbFile getFile() {
+            return this.file;
+        }
+
+        public String getTableName() {
+            return this.name;
+        }
+
+        public String getPkey() {
+            return this.pkeyField;
+        }
+    }
+
+    private HashMap<Integer, Table> catalog;
+
     /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
-        // some code goes here
+        this.catalog = new HashMap<>();
     }
 
     /**
@@ -41,7 +69,14 @@ public class Catalog {
      * @param pkeyField the name of the primary key field
      */
     public void addTable(DbFile file, String name, String pkeyField) {
-        // some code goes here
+        Table table = new Table(file, name, pkeyField);
+        for (HashMap.Entry<Integer, Table> entry : this.catalog.entrySet()) {
+            if (entry.getValue().getTableName().equals(name)) {
+                this.catalog.remove(entry.getKey());
+                break;
+            }
+        }
+        this.catalog.put(file.getId(), table);
     }
 
     public void addTable(DbFile file, String name) {
@@ -64,8 +99,15 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public int getTableId(String name) throws NoSuchElementException {
-        // some code goes here
-        return 0;
+        for (HashMap.Entry<Integer, Table> entry : this.catalog.entrySet()) {
+            Integer tid = entry.getKey();
+            Table table = entry.getValue();
+            
+            if (table.getTableName().equals(name)) {
+                return tid;
+            }
+        }
+        throw new NoSuchElementException("The name " + name + " does not exist in the catalog.");
     }
 
     /**
@@ -75,8 +117,10 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+        if (this.catalog.containsKey(tableid)) {
+            return this.catalog.get(tableid).getFile().getTupleDesc();
+        }
+        throw new NoSuchElementException("The tableid " + tableid + " does not exist");
     }
 
     /**
@@ -86,28 +130,35 @@ public class Catalog {
      *     function passed to addTable
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+        if (this.catalog.containsKey(tableid)) {
+            return this.catalog.get(tableid).getFile();
+        }
+        throw new NoSuchElementException("The tableid " + tableid + " does not exist");
     }
 
     public String getPrimaryKey(int tableid) {
-        // some code goes here
-        return null;
+        if (this.catalog.containsKey(tableid)) {
+            return this.catalog.get(tableid).getPkey();
+        }
+        throw new NoSuchElementException("The tableid " + tableid + " does not exist");
     }
 
     public Iterator<Integer> tableIdIterator() {
-        // some code goes here
-        return null;
+        return this.catalog.keySet().iterator();
     }
 
     public String getTableName(int id) {
-        // some code goes here
-        return null;
+        if (this.catalog.containsKey(id)) {
+            return this.catalog.get(id).getTableName();
+        }
+        throw new NoSuchElementException("The tableid " + id + " does not exist");
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
-        // some code goes here
+        if (this.catalog != null) {
+            this.catalog.clear();
+        }
     }
     
     /**
