@@ -136,7 +136,7 @@ public class HeapPage implements Page {
     public HeapPageId getId() {
     // some code goes here
     
-    return this.pid;
+        return this.pid;
     //throw new UnsupportedOperationException("implement this");
     }
 
@@ -163,14 +163,16 @@ public class HeapPage implements Page {
 
 
         // read fields in the tuple
+        // read in field values into a tuple and return it
         // Create a new tuple using the tuple description/schema of the table
         Tuple t = new Tuple(td);
         // Create a new record id: Reference to a specific tuple on a specific page of a specific table
+        // the pageid of the page on which the tuple resides, the tuple number within the page.
         RecordId rid = new RecordId(pid, slotId);
         // Set the recordId of the tuple
         t.setRecordId(rid);
         try {
-            // td.numFields(): Get the number of fields/columns using the TupleDesc (stores field names, field types)
+            // td.numFields(): Get the number of fields/columns of a tuple using the TupleDesc (stores field names, field types)
             for (int j=0; j<td.numFields(); j++) {
                 // Get the field type of the current field (indexed by j), read and parse the field value from the stream
                 Field f = td.getFieldType(j).parse(dis);

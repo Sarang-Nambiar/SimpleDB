@@ -31,6 +31,9 @@ import java.util.*;
  * - Do not load the entire table into memory on the open() call, it will cause out of memory error for very large tables
  * 
  * 
+ * HeapFile reads tuples a file (bytes). The 'pages' in the file are represented by HeapPages.
+ * HeapPageId is a reference to the specified page number and table id. A unique identifier/reference to a specific page of a specific table
+ * RecordId is a reference to a specific tuple on a specific page of a specific table.
  * 
  * @see HeapPage#HeapPage
  * @author Sam Madden
@@ -49,6 +52,7 @@ public class HeapFile implements DbFile {
     public HeapFile(File f, TupleDesc td) {
         // some code goes here
 
+        // Constructing a heap file given a specified file and the schema of the tuples
         // File is a collection of all the pages
         this.f = f;
         this.td = td;
@@ -78,6 +82,7 @@ public class HeapFile implements DbFile {
         // some code goes here
 
         // As suggested: Hash the absolute file name of the file underlying the heapfile
+        // to return a unique ID identifying this HeapFile
         return f.getAbsoluteFile().hashCode();
         //throw new UnsupportedOperationException("implement this");
     }
@@ -114,11 +119,13 @@ public class HeapFile implements DbFile {
             RandomAccessFile raf = new RandomAccessFile(this.f,"r");
             // Move the pointer to the correct position
             raf.seek(bytesOffset);
-            // Read the BufferPool.getPageSize() (because we create a byte array of BufferPool.getPageSize()) to pageData
+            // Read "BufferPool.getPageSize()" bytes (because we create a byte array of BufferPool.getPageSize()) to pageData
             raf.read(pageData);
             raf.close();
             // Each instance of HeapPage stores data for one page of HeapFiles and 
             // implements the Page interface that is used by BufferPool.
+            // The HeapPage is created from a set of bytes of data read from disk. 
+            // It is initialized with the page Id and the pageData byte array
             return new HeapPage((HeapPageId) pid, pageData);
         } catch (Exception e) {
             e.printStackTrace();
@@ -161,6 +168,36 @@ public class HeapFile implements DbFile {
         return null;
         // not necessary for lab1
     }
+
+
+    /**
+     * According to DbFileIterator.java: DbFileIterator is the iterator interface that all 
+     * SimpleDB Dbfile should implement.
+     * 
+     * Methods to override and implement
+     * 
+     * void open(): Opens the iterator
+     * - throws DbException, TransactionAbortedException; when there are problems opening/accessing the DB
+     * 
+     * boolean hasNext(): Returns true if there are more tuples available, false if no more tuples or iterator isn't open.
+     * - throws DbException, TransactionAbortedException;
+     * 
+     * Tuple next(): Gets the next tuple from the operator. Returns the next tuple in the iterator
+     * - throws DbException, TransactionAbortedException, NoSuchElementException; if there are no more tuples
+     * 
+     * void rewind(): Resets the iterator to the start
+     * - throws DbException, TransactionAbortedException; when rewind is unsupported.
+     * 
+     * void close(): Closes the iterator
+     */
+    public class HeapFileIterator implements DbFileIterator {
+
+
+
+    }
+
+
+
 
     // see DbFile.java for javadocs
     public DbFileIterator iterator(TransactionId tid) {
