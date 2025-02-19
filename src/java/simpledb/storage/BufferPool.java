@@ -86,6 +86,7 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
+        this.pageIdToPage = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {

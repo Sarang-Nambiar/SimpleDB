@@ -31,9 +31,10 @@ import java.util.*;
  * - Do not load the entire table into memory on the open() call, it will cause out of memory error for very large tables
  * 
  * 
- * HeapFile reads tuples a file (bytes). The 'pages' in the file are represented by HeapPages.
+ * HeapFile reads tuples a file (bytes). The 'pages' in the file are represented by HeapPages -> Stores header and tuples.
  * HeapPageId is a reference to the specified page number and table id. A unique identifier/reference to a specific page of a specific table
  * RecordId is a reference to a specific tuple on a specific page of a specific table.
+ * Tuple stores the tuple information, TupleDesc defines the schema
  * 
  * @see HeapPage#HeapPage
  * @author Sam Madden
@@ -109,7 +110,8 @@ public class HeapFile implements DbFile {
 
         // See PageId.java
         int pageNumber = pid.getPageNumber();
-        // Calculate the total number of bytes we need to offset
+        // Calculate the total number of bytes we need to offset - page data includes header data and tuple data
+        // 0-th indexed page number
         Long bytesOffset = (long) pageNumber * BufferPool.getPageSize();
         // Initialize a buffer array to store the Page data we want to read
         byte[] pageData = new byte[BufferPool.getPageSize()];
@@ -118,6 +120,7 @@ public class HeapFile implements DbFile {
         try {
             RandomAccessFile raf = new RandomAccessFile(this.f,"r");
             // Move the pointer to the correct position
+            // 0-th index
             raf.seek(bytesOffset);
             // Read "BufferPool.getPageSize()" bytes (because we create a byte array of BufferPool.getPageSize()) to pageData
             raf.read(pageData);
@@ -192,6 +195,131 @@ public class HeapFile implements DbFile {
      */
     public class HeapFileIterator implements DbFileIterator {
 
+        // TransactionId is a class that contains the identifier of a transaction.
+        private TransactionId transactionId;
+        private HeapFile heapFile;
+        private HeapPage heapPage;
+        private int tableId;
+        private Iterator<Tuple> heapPageIterator;
+        private boolean isOpen;
+        //private int pageNumber;
+        
+        // Define the constructor
+        public HeapFileIterator(TransactionId transactionId, HeapFile heapFile) {
+            this.transactionId = transactionId;
+            this.heapFile = heapFile;
+            this.tableId = heapFile.getId();
+            this.isOpen = false;
+        
+        }
+
+
+
+        // Define the open method that opens the iterator
+        // Recall: Iterator must use the BufferPool.getPage() method to access pages in the `HeapFile`
+        // Recall: BufferPool manages the reading and writing of pages into memory from
+        // disk. Access methods call into it to retrieve pages, and it fetches
+        // pages from the appropriate location
+        // The BufferPool singleton object manages all page access and modifications. 
+        // Because BufferPool has a global view of all page accesses, it can cache 
+        // frequently used pages in memory so that page fetches doesn’t always go to disk. 
+        // Once the BufferPool cache gets full, it will need to evict pages using some 
+        // eviction algorithm. The BufferPool evicts pages using the no-steal algorithm to 
+        // provide ACID transaction guarantees, which is discussed more in the Transactions 
+        // section
+        @Override
+        public void open() throws DbException, TransactionAbortedException {
+
+            // Initialize the heapPageId with the tableId (fileId) and page number starting from 0
+            // Identifies the file/table it belongs to and what page number
+            HeapPageId heapPageId = new HeapPageId(this.tableId, 0);
+            // getPage requires a TransactionId, PageId, Permissions
+            // In the getPage method, there is a readPage method that is called on the HeapFile
+            // dbFile (HeapFile) readPage -> returns a HeapFile
+            // HeapPage stores header and tuple data for one page of HeapFiles
+            this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, null);
+            // Return an iterator that stores tuples: ArrayList<Tuple>
+            this.heapPageIterator = this.heapPage.iterator();
+            this.isOpen = true;
+        }
+
+
+        // Define the hasNext method that returns true if there are more tuples available, 
+        // false if no more tuples or iterator isn't open
+        @Override
+        public boolean hasNext() throws DbException, TransactionAbortedException{
+
+            // Return false if the iterator isn't open
+            if(!(this.isOpen)) {
+                return false;
+            }
+
+            // Check if more tuples are available 
+            // More tuples available in the current page
+            if(this.heapPageIterator.hasNext()) {
+                return true;
+            // There are no more tuples in the current page,
+            // check if there is a next page
+            } else {
+                // Check if there is a next page
+                // Get the Page Number -> heapPage, get the heapPageId passed to heapPage, get the 
+                // page number passed to the HeapPageId
+                // If there ae still pages left
+                // this.heapFile.numPages()-1 -> -1 is needed because 0 indexed 
+                if(this.heapPage.getId().getPageNumber() <= this.heapFile.numPages()-1) {
+
+                    // Initialize a new heapPageId with the tableId (fileId) and incremented page number
+                    // Identifies the file/table it belongs to and what page number
+                    HeapPageId heapPageId = new HeapPageId(this.tableId, this.heapPage.getId().getPageNumber() + 1);
+                    // Set this as the new heap page
+                    this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, null);
+                    // Return an iterator that stores tuples: ArrayList<Tuple>
+                    this.heapPageIterator = this.heapPage.iterator();
+                    // If the next page has data, return true
+                    if(this.heapPageIterator.hasNext()) {
+                        return true;
+                    // Else return false
+                    } else {
+                        return false;
+                    }
+
+                // No next page, return false
+                } else {
+                    return false;
+                } 
+            }
+        }
+
+
+        // Define the next method that gets the next tuple from the operator. Returns the next tuple in the iterator
+        @Override
+        public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException{
+            if(this.hasNext()) {
+                return this.heapPageIterator.next();
+            } else {
+                throw new NoSuchElementException();
+            }
+        }
+
+
+        // Resets the iterator to the start
+        @Override
+        public void rewind() throws DbException, TransactionAbortedException{
+            this.isOpen = false;
+            this.open();
+        }
+
+        
+        // Closes the iterator
+        @Override
+        public void close() {
+            this.transactionId = null;
+            this.heapFile = null;
+            this.heapPage = null;
+            this.heapPageIterator = null;
+            this.isOpen = false;
+        }
+
 
 
     }
@@ -208,7 +336,7 @@ public class HeapFile implements DbFile {
         // * - This method loads the page into the buffer pool and will eventually be used (later lab) to implement
         // *   locking-based concurrency control and recovery
         // * - Do not load the entire table into memory on the open() call, it will cause out of memory error for very large tables
-        return null;
+        return new HeapFileIterator(tid, this);
     }
 
 }
