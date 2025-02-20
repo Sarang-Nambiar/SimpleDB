@@ -95,12 +95,14 @@ public class HeapPage implements Page {
     private int getHeaderSize() {        
         
         // some code goes here
+
+        //todo CHECK ON THE NEED FOR DOUBLE
         
         // headerBytes = ceiling(tuples_per_page/8)
         // - Each tuple is assumed to require one bit of storage
         // - Take the total number of tuples, divided by 8, to get the bytes
 
-        return (int) Math.ceil(this.getNumTuples()/8);
+        return (int) Math.ceil((double)this.getNumTuples()/8);
         //return 0;
                  
     }

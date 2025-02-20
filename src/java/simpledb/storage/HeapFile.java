@@ -109,10 +109,9 @@ public class HeapFile implements DbFile {
         // Need random access to the file in order to read and write pages at arbitrary offsets
 
         // See PageId.java
-        int pageNumber = pid.getPageNumber();
         // Calculate the total number of bytes we need to offset - page data includes header data and tuple data
         // 0-th indexed page number
-        Long bytesOffset = (long) pageNumber * BufferPool.getPageSize();
+        Long bytesOffset = (long) pid.getPageNumber() * BufferPool.getPageSize();
         // Initialize a buffer array to store the Page data we want to read
         byte[] pageData = new byte[BufferPool.getPageSize()];
 
@@ -123,7 +122,7 @@ public class HeapFile implements DbFile {
             // 0-th index
             raf.seek(bytesOffset);
             // Read "BufferPool.getPageSize()" bytes (because we create a byte array of BufferPool.getPageSize()) to pageData
-            raf.read(pageData);
+            raf.readFully(pageData);
             raf.close();
             // Each instance of HeapPage stores data for one page of HeapFiles and 
             // implements the Page interface that is used by BufferPool.
@@ -266,7 +265,7 @@ public class HeapFile implements DbFile {
                 // page number passed to the HeapPageId
                 // If there ae still pages left
                 // this.heapFile.numPages()-1 -> -1 is needed because 0 indexed 
-                if(this.heapPage.getId().getPageNumber() <= this.heapFile.numPages()-1) {
+                if(this.heapPage.getId().getPageNumber() < this.heapFile.numPages()-1) {
 
                     // Initialize a new heapPageId with the tableId (fileId) and incremented page number
                     // Identifies the file/table it belongs to and what page number
