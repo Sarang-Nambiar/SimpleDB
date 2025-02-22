@@ -169,10 +169,10 @@ Maintains a HeapPage from a set of bytes read from a file
 
 <br/>
 
-<u>Methods</u>. **todo: check on the need for double in the methods**
+<u>Methods</u>. 
 
 - ```private int getNumTuples()```: Get the number of tuples in the page. ```(int) Math.floor((BufferPool.getPageSize() * 8) / (this.td.getSize() * 8 + 1));```
-- ```private int getHeaderSize()```: Get the number of bytes required for the header. ```return (int) Math.ceil((double)this.getNumTuples()/8);```
+- ```private int getHeaderSize()```: Get the number of bytes required for the header. ```return (int) Math.ceil((double)this.getNumTuples()/8);```. **double seems to be needed here**
 - ```public HeapPageId getId()```: Return the PageId of this HeapPage
 - ```private Tuple readNextTuple(DataInputStream dis, int slotId)```: Reads tuples from a byte array
 - ```public byte[] getPageData()```: Convert the header byte array and tuples array back into a byte array
@@ -258,3 +258,16 @@ An implementation of a sequential scan access method that reads each tuple of a 
 <br/>
 <br/>
 <br/>
+
+## **Tests**
+
+| Test Name                            | Result            | Remarks |
+|--------------------------------------|-------------------|---------|
+| ant runtest -Dtest=TupleTest         | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=TupleDescTest     | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=CatalogTest       | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=HeapPageIdTest    | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=RecordIdTest      | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=HeapPageReadTest  | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=HeapFileReadTest  | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=ScanTest       | BUILD SUCCESSFUL  |         |

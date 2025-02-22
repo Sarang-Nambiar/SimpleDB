@@ -83,6 +83,7 @@ public class HeapPage implements Page {
         // some code goes here
         // tuples_per_page = floor((page_size * 8) / (tuple_size * 8 + 1))
         // floor((BufferPool.getPageSize()*8) / (tuple_size * 8 + 1))
+        // Integer division in java automatically floors the result?
         return (int) Math.floor((BufferPool.getPageSize() * 8) / (this.td.getSize() * 8 + 1));
         //return 0;
 
@@ -101,7 +102,7 @@ public class HeapPage implements Page {
         // headerBytes = ceiling(tuples_per_page/8)
         // - Each tuple is assumed to require one bit of storage
         // - Take the total number of tuples, divided by 8, to get the bytes
-
+        // Double is needed to preserve decimal
         return (int) Math.ceil((double)this.getNumTuples()/8);
         //return 0;
                  

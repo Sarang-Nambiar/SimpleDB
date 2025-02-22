@@ -265,9 +265,9 @@ public class HeapFile implements DbFile {
                 // page number passed to the HeapPageId
                 // If there ae still pages left
                 // this.heapFile.numPages()-1 -> -1 is needed because 0 indexed 
-                //todo change to while loop because if the next page does not, we have to go the next page as well
-                if(this.heapPage.getId().getPageNumber() < this.heapFile.numPages()-1) {
+                // todo change to while loop because if the next page does not, we have to go the next page as well
 
+                while (this.heapPage.getId().getPageNumber() < this.heapFile.numPages()-1) {
                     // Initialize a new heapPageId with the tableId (fileId) and incremented page number
                     // Identifies the file/table it belongs to and what page number
                     HeapPageId heapPageId = new HeapPageId(this.tableId, this.heapPage.getId().getPageNumber() + 1);
@@ -278,15 +278,13 @@ public class HeapFile implements DbFile {
                     // If the next page has data, return true
                     if(this.heapPageIterator.hasNext()) {
                         return true;
-                    // Else return false
-                    } else {
-                        return false;
-                    }
-
-                // No next page, return false
-                } else {
-                    return false;
+                    } 
+                    // If not, continue on to the next page that may contain data
                 } 
+
+                // After exhausing all the pages, there is no more page data
+                return false;
+
             }
         }
 
