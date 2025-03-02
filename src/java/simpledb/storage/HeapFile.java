@@ -139,6 +139,23 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+
+        // Similar to method above
+        // Calculate offset at which this page is to be written
+        Long bytesOffset = (long) page.getId().getPageNumber() * BufferPool.getPageSize();
+        byte[] pageData = page.getPageData();
+
+        // KIV
+        try {
+            RandomAccessFile raf = new RandomAccessFile(this.f,"rw");
+            raf.seek(bytesOffset);
+            raf.write(pageData);
+            raf.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
     }
 
     /**
@@ -155,21 +172,81 @@ public class HeapFile implements DbFile {
         //return 0;
     }
 
+
+
+
+
+
+
+
     // see DbFile.java for javadocs
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
+        // return null;
         // not necessary for lab1
+
+        List<Page> modified_pages = new ArrayList<Page>();
+
+        // It is important that the HeapFile.insertTuple() and HeapFile.deleteTuple() methods
+        // access pages using the BufferPool.getPage() method
+
+        // Check if any pages in this HeapFile have an empty slot
+        for(int i=0; i<this.numPages(); i++) {
+            // Get a page
+            HeapPageId pageId = new HeapPageId(this.getId(), i);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, null);
+
+            // Check for empty slots in this page
+            // If there are empty slots, insert the tuple in this page
+            if(page.getNumEmptySlots()>0) {
+                page.insertTuple(t);
+                page.markDirty(true, tid);
+                modified_pages.add(page);
+                return modified_pages;
+            }
+        }
+
+        // There are no pages in this HeapFile with any empty slots so we need to write a new page
+        // and insert the tuple into that page
+        // 0-th index. So new index should indeed be numPages()
+        HeapPageId newPageId = new HeapPageId(this.getId(), this.numPages());
+        HeapPage newPage = new HeapPage(newPageId, HeapPage.createEmptyPageData());
+        newPage.insertTuple(t);
+        newPage.markDirty(true, tid);
+        modified_pages.add(newPage);
+        this.writePage(newPage);
+
+        return modified_pages;
     }
+
+
+
+
 
     // see DbFile.java for javadocs
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
+        // return null;
         // not necessary for lab1
+
+        ArrayList<Page> modified_pages = new ArrayList<Page>();
+
+        // Get the page that the tuple resides on
+        // Delete the tuple from the page
+        PageId pageId = t.getRecordId().getPageId();
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, null);
+        page.deleteTuple(t);
+        page.markDirty(true, tid);
+        modified_pages.add(page);
+        return modified_pages;
     }
+
+
+
+
+
 
 
     /**

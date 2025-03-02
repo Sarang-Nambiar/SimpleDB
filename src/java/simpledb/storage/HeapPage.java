@@ -24,6 +24,7 @@ public class HeapPage implements Page {
     final byte[] header;
     final Tuple[] tuples;
     final int numSlots;
+    private TransactionId dirtyTid;
 
     byte[] oldData;
     private final Byte oldDataLock= (byte) 0;
@@ -296,6 +297,10 @@ public class HeapPage implements Page {
         return new byte[len]; //all 0
     }
 
+
+
+
+
     /**
      * Delete the specified tuple from the page; the corresponding header bit should be updated to reflect
      *   that it is no longer stored on any page.
@@ -306,7 +311,27 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+
+        // Throw DbException if tuple is not on page
+        if(t.getRecordId().getPageId()!=this.pid) {
+            throw new DbException("Tuple is not on this page");
+        }
+
+        // Throw DbException if tuple slot is already empty
+        if(!this.isSlotUsed(t.getRecordId().getTupleNumber())) {
+            throw new DbException("Tuple slot is already empty");
+        }
+
+        // Delete the tuple from the page
+        tuples[t.getRecordId().getTupleNumber()] = null;
+
+        // Corresponding header bit should be updated to reflect that it is
+        // no longer stored on any page
+        this.markSlotUsed(t.getRecordId().getTupleNumber(), false);
     }
+
+
+
 
     /**
      * Adds the specified tuple to the page;  the tuple should be updated to reflect
@@ -318,7 +343,34 @@ public class HeapPage implements Page {
     public void insertTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        // You may find that the getNumEmptySlots() and isSlotUsed() methods we asked you to implement in Lab 1 serve as useful abstractions
+
+        if(this.getNumEmptySlots()==0){
+            throw new DbException("Page is full (no empty slots)");
+        }
+
+        if(!this.td.equals(t.getTupleDesc())){
+            throw new DbException("Tuple Desc is a mismatch");
+        }
+
+        // Get an empty slot
+        for(int i=0; i<this.numSlots; i++) {
+            // If the current slot is empty
+            if(!isSlotUsed(i)) {
+                // Update the tuple to reflect that it is now stored on this page
+                t.setRecordId(new RecordId(this.pid, i));
+                // Store the tuple in the slot. Add the specified tuple to the page
+                this.tuples[i] = t;
+                // Mark that the slot is used
+                this.markSlotUsed(i, true);
+                break;
+            }
+        }
     }
+
+
+
+
 
     /**
      * Marks this page as dirty/not dirty and record that transaction
@@ -327,7 +379,17 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
 	// not necessary for lab1
+
+        // Mark who modified the page
+        if (dirty) {
+            this.dirtyTid = tid;
+        } else {
+            this.dirtyTid = null;
+        }
     }
+
+
+
 
     /**
      * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
@@ -335,8 +397,13 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // some code goes here
 	// Not necessary for lab1
-        return null;      
+        
+        return this.dirtyTid;
+        //return null;      
     }
+
+
+
 
     /**
      * Returns the number of empty slots on this page.
@@ -376,13 +443,42 @@ public class HeapPage implements Page {
         //return false;
     }
 
+
+
+
     /**
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
         // some code goes here
         // not necessary for lab1
+
+        // abstraction to modify the filled or cleared status of a tuple in the page header
+
+        // Example 10/8 = 1
+        // slotId 10 is stored in header[1]. Gives the position of the byte that contains the bit for slot i
+        int byteIndex = i/8;
+        // Example 10%8 = 2
+        // slotId 10 is in bit 2 of header[1]. Gives the position of bit inside the byte
+        int bitIndex = i%8;
+
+        // Create bit mask
+        // Example: 0b11111011 (Target bit 2 of the current byte) -> corresponds to the current slot
+        byte bitMask = (byte) ~(1 << bitIndex);
+
+        // Use & operation to set the target bit (current slot) to 0
+        byte reset_target_bit = (byte) (header[byteIndex] & bitMask);
+
+        // Set used to 1 (true) or 0 (false)
+        byte used = (byte) (value ? 1:0);
+
+        // First, shift 'used' to the slot position. Next, use the | operation to mark whether the slot is used
+        // 0 | 0 -> 0. 0 | 1 -> 1
+        header[byteIndex] = (byte) (reset_target_bit | (used << bitIndex));
     }
+
+
+
 
     /**
      * @return an iterator over all tuples on this page (calling remove on this iterator throws an UnsupportedOperationException)

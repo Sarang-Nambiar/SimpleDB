@@ -8,7 +8,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
-
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -198,6 +198,13 @@ public class BufferPool {
         // not necessary for lab1|lab2
     }
 
+
+
+
+
+
+
+
     /**
      * Add a tuple to the specified table on behalf of transaction tid.  Will
      * acquire a write lock on the page the tuple is added to and any other 
@@ -217,7 +224,23 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+
+
+        // These methods should call the appropriate methods in the HeapFile that 
+        // belong to the table being modified (this extra level of indirection is needed to support other types of files 
+        // — like indices — in the future)
+        
+        // Get the HeapFile
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> modified_pages = (ArrayList<Page>) file.insertTuple(tid, t);
+
+        for(Page page: modified_pages) {
+            //KIV. need evict?
+        }
+
+
     }
+
 
     /**
      * Remove the specified tuple from the buffer pool.
@@ -238,6 +261,12 @@ public class BufferPool {
         // not necessary for lab1
     }
 
+
+
+
+
+
+
     /**
      * Flush all dirty pages to disk.
      * NB: Be careful using this routine -- it writes dirty data to disk so will
@@ -248,6 +277,8 @@ public class BufferPool {
         // not necessary for lab1
 
     }
+
+
 
     /** Remove the specific page id from the buffer pool.
         Needed by the recovery manager to ensure that the
