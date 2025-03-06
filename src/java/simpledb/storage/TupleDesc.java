@@ -415,8 +415,8 @@ public class TupleDesc implements Serializable {
         // some code goes here
 
         StringBuilder sb = new StringBuilder();
-        for(int i=0; i < this.getSize(); i++){
-            if(i==this.getSize()-1){
+        for(int i=0; i < this.numFields(); i++){
+            if(i==this.numFields()-1){
                 sb.append(this.getFieldType(i).toString() + "(" + this.getFieldName(i) + ")");
             }
             else {
