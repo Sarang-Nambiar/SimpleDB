@@ -271,3 +271,12 @@ An implementation of a sequential scan access method that reads each tuple of a 
 | ant runtest -Dtest=HeapPageReadTest  | BUILD SUCCESSFUL  |         |
 | ant runtest -Dtest=HeapFileReadTest  | BUILD SUCCESSFUL  |         |
 | ant runsystest -Dtest=ScanTest       | BUILD SUCCESSFUL  |         |
+
+## **Final Test**
+
+- Create ```some_data_file.txt``` with the lines mentioned on GitHub in the main directory. Remember to enter a new line after the last line.
+- Run ```ant```
+- Run ```java -jar dist/simpledb.jar convert some_data_file.txt 3```
+- Create ```test.java``` under ```src/java/simpledb/``` and copy the code from GitHub
+- Run ```java -classpath dist/simpledb.jar simpledb.test```
+

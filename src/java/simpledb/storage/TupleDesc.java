@@ -417,10 +417,10 @@ public class TupleDesc implements Serializable {
         StringBuilder sb = new StringBuilder();
         for(int i=0; i < this.getSize(); i++){
             if(i==this.getSize()-1){
-                sb.append(this.getFieldType(i).toString() + "(" + this.getFieldType(i) + ")");
+                sb.append(this.getFieldType(i).toString() + "(" + this.getFieldName(i) + ")");
             }
             else {
-                sb.append(this.getFieldType(i).toString() + "(" + this.getFieldType(i) + "),");
+                sb.append(this.getFieldType(i).toString() + "(" + this.getFieldName(i) + "),");
             }
         }
         return sb.toString();
