@@ -151,7 +151,7 @@ public class HeapFile implements DbFile {
         // https://docs.oracle.com/javase/8/docs/api/java/io/File.html
         // length() -> The length, in bytes, of the file
         // BufferPool.getPageSize() -> number of bytes in a page 
-        return (int) Math.ceil(this.f.length() / BufferPool.getPageSize());
+        return (int) Math.ceil((double)this.f.length() / BufferPool.getPageSize());
         //return 0;
     }
 

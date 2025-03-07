@@ -127,7 +127,15 @@ public class HeapPageId implements PageId {
 
         PageId PageId2 = (PageId) o;
 
+        /* 
         if(this.hashCode()==PageId2.hashCode()){
+            return true;
+        } else{
+            return false;
+        }
+        */
+
+        if(this.getTableId()==PageId2.getTableId() && this.getPageNumber()==PageId2.getPageNumber()){
             return true;
         } else{
             return false;
