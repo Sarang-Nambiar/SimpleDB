@@ -224,22 +224,45 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
-
+        // Lab 2
+        // Lock acquisition is not needed for lab2
 
         // These methods should call the appropriate methods in the HeapFile that 
-        // belong to the table being modified (this extra level of indirection is needed to support other types of files 
+        // belong to the table being modified 
+        // (this extra level of indirection is needed to support other types of files 
         // — like indices — in the future)
         
         // Get the HeapFile
         HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        // Add a tuple to the specified table on behalf of transaction tid
+        // Get the modified pages
         ArrayList<Page> modified_pages = (ArrayList<Page>) file.insertTuple(tid, t);
 
         for(Page page: modified_pages) {
-            //KIV. need evict?
+            // Pages are already marked dirty by file.insertTuple
+            // All pages in this loop are dirty 
+            // Add the versions of these pages to the cache
+            // i.e. (replacing any existing versions of those pages)
+            // so that future requests see up-to-date pages
+
+            // If the page is already in the cache, remove it
+            if (this.pageIdToPage.containsKey(page.getId())) {
+                this.pageIdToPage.remove(page.getId());
+            }
+            
+            // If there is no space in the cache/BufferPool, run the eviction policy
+            if(this.pageIdToPage.size() >= this.numPages) {
+                this.evictPage();
+            } 
+
+            // Add the page to the cache
+            this.pageIdToPage.put(page.getId(), page);
         }
-
-
     }
+
+
+
+
 
 
     /**
@@ -259,6 +282,43 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
+
+        // Lock acquisition is not needed for lab2
+
+        // These methods should call the appropriate methods in the HeapFile that 
+        // belong to the table being modified 
+        // (this extra level of indirection is needed to support other types of files 
+        // — like indices — in the future)
+        
+        // Get the HeapFile
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        // Delete a tuple from the specified table on behalf of transaction tid
+        // Get the modified pages
+        ArrayList<Page> modified_pages = (ArrayList<Page>) file.deleteTuple(tid, t);
+
+        for(Page page: modified_pages) {
+            // Pages are already marked dirty by file.insertTuple
+            // All pages in this loop are dirty 
+            // Add the versions of these pages to the cache
+            // i.e. (replacing any existing versions of those pages)
+            // so that future requests see up-to-date pages
+
+            // If the page is already in the cache, remove it
+            if (this.pageIdToPage.containsKey(page.getId())) {
+                this.pageIdToPage.remove(page.getId());
+            }
+            
+            // If there is no space in the cache/BufferPool, run the eviction policy
+            if(this.pageIdToPage.size() >= this.numPages) {
+                this.evictPage();
+            } 
+
+            // Add the page to the cache
+            this.pageIdToPage.put(page.getId(), page);
+        }
+
+
     }
 
 

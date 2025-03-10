@@ -311,9 +311,10 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
 
         // Throw DbException if tuple is not on page
-        if(t.getRecordId().getPageId()!=this.pid) {
+        if(!t.getRecordId().getPageId().equals(this.pid)) {
             throw new DbException("Tuple is not on this page");
         }
 
@@ -323,7 +324,7 @@ public class HeapPage implements Page {
         }
 
         // Delete the tuple from the page
-        tuples[t.getRecordId().getTupleNumber()] = null;
+        this.tuples[t.getRecordId().getTupleNumber()] = null;
 
         // Corresponding header bit should be updated to reflect that it is
         // no longer stored on any page
@@ -343,6 +344,7 @@ public class HeapPage implements Page {
     public void insertTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
         // You may find that the getNumEmptySlots() and isSlotUsed() methods we asked you to implement in Lab 1 serve as useful abstractions
 
         if(this.getNumEmptySlots()==0){
@@ -359,7 +361,7 @@ public class HeapPage implements Page {
             if(!isSlotUsed(i)) {
                 // Update the tuple to reflect that it is now stored on this page
                 t.setRecordId(new RecordId(this.pid, i));
-                // Store the tuple in the slot. Add the specified tuple to the page
+                // Store the tuple in the slot: Add the specified tuple to the page
                 this.tuples[i] = t;
                 // Mark that the slot is used
                 this.markSlotUsed(i, true);
@@ -379,6 +381,7 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
 	// not necessary for lab1
+    // Lab 2
 
         // Mark who modified the page
         if (dirty) {
@@ -397,6 +400,7 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // some code goes here
 	// Not necessary for lab1
+    // Lab 2
         
         return this.dirtyTid;
         //return null;      
@@ -452,6 +456,8 @@ public class HeapPage implements Page {
     private void markSlotUsed(int i, boolean value) {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
+        // modify the header bitmap for methods such as insertTuple() and deleteTuple()
 
         // abstraction to modify the filled or cleared status of a tuple in the page header
 
@@ -463,17 +469,25 @@ public class HeapPage implements Page {
         int bitIndex = i%8;
 
         // Create bit mask
-        // Example: 0b11111011 (Target bit 2 of the current byte) -> corresponds to the current slot
+        // 1 << bitIndex: creates a bit mask with 1 at position bitIndex
+        // ~(1 << bitIndex): Flips the bit mask
+        // Example: 0b00000100 -> 0b11111011 example: target bit 2 of the current byte (curr slot)
         byte bitMask = (byte) ~(1 << bitIndex);
 
-        // Use & operation to set the target bit (current slot) to 0
+        // Use & operation to set the target bit (ex. target bit 2 i.e. current slot) to 0
+        // other positions unaffected because its 1
         byte reset_target_bit = (byte) (header[byteIndex] & bitMask);
 
         // Set used to 1 (true) or 0 (false)
         byte used = (byte) (value ? 1:0);
 
-        // First, shift 'used' to the slot position. Next, use the | operation to mark whether the slot is used
-        // 0 | 0 -> 0. 0 | 1 -> 1
+        // First, shift 'used' to the slot position: (used << bitIndex)
+        // Example used = 1
+        // b00000100
+        // Next, use the | operation to mark whether the slot is used
+        // 0 (from reset_target_bit) | 0 (from used) -> 0. 
+        // 0 (from reset_target_bit) | 1 (from used) -> 1
+        // other positions unaffected because its or
         header[byteIndex] = (byte) (reset_target_bit | (used << bitIndex));
     }
 

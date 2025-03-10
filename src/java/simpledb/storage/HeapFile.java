@@ -135,13 +135,17 @@ public class HeapFile implements DbFile {
         return null;
     }
 
+
+
+
     // see DbFile.java for javadocs
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
 
         // Similar to method above
-        // Calculate offset at which this page is to be written
+        // Calculate offset at which this page is to be written (remember 0-th indexing is used)
         Long bytesOffset = (long) page.getId().getPageNumber() * BufferPool.getPageSize();
         byte[] pageData = page.getPageData();
 
@@ -185,7 +189,12 @@ public class HeapFile implements DbFile {
         // some code goes here
         // return null;
         // not necessary for lab1
+        // Lab 2
 
+        // Note that it is important that the HeapFile.insertTuple() and HeapFile.deleteTuple() methods 
+        // access pages using the BufferPool.getPage() method
+
+        // Store the page that has been modified
         List<Page> modified_pages = new ArrayList<Page>();
 
         // It is important that the HeapFile.insertTuple() and HeapFile.deleteTuple() methods
@@ -209,7 +218,7 @@ public class HeapFile implements DbFile {
 
         // There are no pages in this HeapFile with any empty slots so we need to write a new page
         // and insert the tuple into that page
-        // 0-th index. So new index should indeed be numPages()
+        // Because its 0-th index, the new index should be numPages()
         HeapPageId newPageId = new HeapPageId(this.getId(), this.numPages());
         HeapPage newPage = new HeapPage(newPageId, HeapPage.createEmptyPageData());
         newPage.insertTuple(t);
@@ -217,6 +226,7 @@ public class HeapFile implements DbFile {
         modified_pages.add(newPage);
         this.writePage(newPage);
 
+        // Return the page that has been modified
         return modified_pages;
     }
 
@@ -230,7 +240,12 @@ public class HeapFile implements DbFile {
         // some code goes here
         // return null;
         // not necessary for lab1
+        // Lab 2
 
+        // Note that it is important that the HeapFile.insertTuple() and HeapFile.deleteTuple() methods 
+        // access pages using the BufferPool.getPage() method
+
+        // Store the page that has been modified
         ArrayList<Page> modified_pages = new ArrayList<Page>();
 
         // Get the page that the tuple resides on
@@ -240,6 +255,8 @@ public class HeapFile implements DbFile {
         page.deleteTuple(t);
         page.markDirty(true, tid);
         modified_pages.add(page);
+
+        // Return the page that has been modified
         return modified_pages;
     }
 
