@@ -48,10 +48,10 @@ public class Insert extends Operator {
         // some code goes here
 
         // Insert operator is also an iterator
-        // Operators act as iterators
+        // -> Operators are iterators in SimpleDb
 
         this.tid = t;
-        // Child operator contains tuples that Insert will operate on 
+        // Child operator contains tuples that the Insert operator will operate on 
         // The child operator is an iterator that contains tuples. See execution/OpIterator
         this.child = child;
         this.tableId = tableId;
@@ -60,9 +60,9 @@ public class Insert extends Operator {
         // "returning a single tuple with 1 integer field containing the count"
         this.td = new TupleDesc(new Type[]{Type.INT_TYPE});
 
-        // Throw DbException if TupleDesc of child differs from table into which we are to insert
+        // Throw DbException if TupleDesc of child differs from the table which we want to insert into
         if(!child.getTupleDesc().equals(Database.getCatalog().getTupleDesc(this.tableId))){
-            throw new DbException("TupleDesc of child differs from the table which its to be inserted into");
+            throw new DbException("TupleDesc of child differs from the table that its supposed to be inserted into");
         }
     }
 
@@ -80,6 +80,7 @@ public class Insert extends Operator {
         // Insert is also an iterator
         super.open();
         this.child.open();
+        // Re-initialized fetched flag to false
         this.fetched = false;
     }
 
@@ -120,7 +121,7 @@ public class Insert extends Operator {
         // Use BufferPool.insertTuple() to do this
 
         // If fetchNext() has been called more than once, return null
-        // Its a one time action
+        // It's a one time action for an operator
         if(this.fetched){
             return null;
         }
@@ -130,7 +131,8 @@ public class Insert extends Operator {
         int num_inserts = 0;
 
         // Read tuples from the child operator
-        // Insert the tuples to the table id specified in the constructor
+        // Insert the tuples read from child to the table id specified in the constructor
+        // Inserts should be passed through BufferPool. An instances of BufferPool is available via Database.getBufferPool()
         // Use BufferPool.insertTuple()
         while(this.child.hasNext()) {
             Tuple tuple = child.next();
@@ -158,6 +160,7 @@ public class Insert extends Operator {
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        // Insert Operator should only have one source/child
         if(children.length > 0){
             this.child = children[0];
         }
