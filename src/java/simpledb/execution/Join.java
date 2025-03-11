@@ -14,44 +14,57 @@ public class Join extends Operator {
 
     private static final long serialVersionUID = 1L;
 
+    private final JoinPredicate predicate;
+    private OpIterator child1;
+    private OpIterator child2;
+
+    // For nested loops join, we keep track of the current outer tuple.
+    private Tuple currentOuter;
+
     /**
      * Constructor. Accepts two children to join and the predicate to join them
      * on
      * 
      * @param p
-     *            The predicate to use to join the children
+     *               The predicate to use to join the children
      * @param child1
-     *            Iterator for the left(outer) relation to join
+     *               Iterator for the left(outer) relation to join
      * @param child2
-     *            Iterator for the right(inner) relation to join
+     *               Iterator for the right(inner) relation to join
      */
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+        this.predicate = p;
+        this.child1 = child1;
+        this.child2 = child2;
+        this.currentOuter = null;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        // return null;
+        return predicate;
     }
 
     /**
      * @return
-     *       the field name of join field1. Should be quantified by
-     *       alias or table name.
-     * */
+     *         the field name of join field1. Should be quantified by
+     *         alias or table name.
+     */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        // return null;
+        return child1.getTupleDesc().getFieldName(predicate.getField1());
     }
 
     /**
      * @return
-     *       the field name of join field2. Should be quantified by
-     *       alias or table name.
-     * */
+     *         the field name of join field2. Should be quantified by
+     *         alias or table name.
+     */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        return child2.getTupleDesc().getFieldName(predicate.getField2());
     }
 
     /**
@@ -60,20 +73,57 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        // return null;
+        return TupleDesc.merge(child1.getTupleDesc(), child2.getTupleDesc());
+
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        child1.open();
+        child2.open();
+        super.open();
+        // Initialize currentOuter to the first tuple from child1, if available.
+        if (child1.hasNext()) {
+            currentOuter = child1.next();
+        }
     }
 
     public void close() {
         // some code goes here
+        super.close();
+        child1.close();
+        child2.close();
+        currentOuter = null;
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        child1.rewind();
+        child2.rewind();
+        currentOuter = child1.hasNext() ? child1.next() : null;
+    }
+
+    /**
+     * NEW HELPFER FUNCTION
+     * Merges two tuples into one, concatenating their fields.
+     */
+    private Tuple mergeTuples(Tuple t1, Tuple t2) {
+        TupleDesc td1 = t1.getTupleDesc();
+        TupleDesc td2 = t2.getTupleDesc();
+        TupleDesc mergedTd = TupleDesc.merge(td1, td2);
+        Tuple mergedTuple = new Tuple(mergedTd);
+
+        int index = 0;
+        for (int i = 0; i < td1.numFields(); i++) {
+            mergedTuple.setField(index++, t1.getField(i));
+        }
+        for (int i = 0; i < td2.numFields(); i++) {
+            mergedTuple.setField(index++, t2.getField(i));
+        }
+
+        return mergedTuple;
     }
 
     /**
@@ -96,18 +146,36 @@ public class Join extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        // return null;
+        while (currentOuter != null) {
+            while (child2.hasNext()) {
+                Tuple innerTuple = child2.next();
+                if (predicate.filter(currentOuter, innerTuple)) {
+                    // Create a new tuple that is the concatenation of currentOuter and innerTuple.
+                    return mergeTuples(currentOuter, innerTuple);
+                }
+            }
+            // Reset child2 iterator for the next outer tuple.
+            child2.rewind();
+            currentOuter = child1.hasNext() ? child1.next() : null;
+        }
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        // return null;
+        return new OpIterator[] { child1, child2 };
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        if (children.length != 2)
+            throw new IllegalArgumentException("Join operator expects exactly two children.");
+        this.child1 = children[0];
+        this.child2 = children[1];
     }
 
 }
