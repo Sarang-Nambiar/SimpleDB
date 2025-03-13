@@ -9,6 +9,8 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -70,7 +72,36 @@ public class BufferPool {
     // BufferPool should use the numPages argument to the
     // constructor
     private int numPages; 
-    private ConcurrentHashMap<PageId, Page> pageIdToPage;
+
+    private class Frame {
+        private Page page;
+        private int pinCount; // The current pin count of the buffer pool
+        
+        public Frame(Page page, int pinCount) {
+            this.page = page;
+            this.pinCount = pinCount;
+        }
+
+        public Page get_Page() {
+            return this.page;
+        }
+
+        public int getTimeStamp() {
+            return this.pinCount;
+        }
+
+        public void set_Page(Page p) {
+            this.page = p;
+        }
+
+        public void setTimeStamp(int pincount) {
+            this.pinCount = pincount;
+        }
+    }
+    private int currTimeStamp = 1;
+    private ConcurrentHashMap<PageId, Frame> pageToFrame;
+    private PriorityQueue<Frame> minHeap;
+
 
     // Define a simple intrinsic lock: Recall, every Java object
     // can implictly act as a lock for purposes of synchronisation
@@ -86,7 +117,8 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
-        this.pageIdToPage = new ConcurrentHashMap<>();
+        this.pageToFrame = new ConcurrentHashMap<>();
+        this.minHeap = new PriorityQueue<>( (p1, p2) -> Integer.compare(p1.getTimeStamp(), p2.getTimeStamp()) );
     }
     
     public static int getPageSize() {
@@ -118,7 +150,7 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
 
@@ -127,29 +159,31 @@ public class BufferPool {
         // https://www.baeldung.com/java-mutex
         synchronized(simpleLock) {
             // The retrieved page should be looked up in the buffer pool. If it is present, it should be returned
-            if(this.pageIdToPage.containsKey(pid)) {
-                return this.pageIdToPage.get(pid);
+            if(this.pageToFrame.containsKey(pid)) {
+                this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
+                return this.pageToFrame.get(pid).get_Page();
             // If it is not present, it should be added to the buffer pool and returned.
             } else {
                 // If there is insufficient space in the buffer pool
                 // For this lab, if more than `numPages` requests are made for different pages, then 
                 // instead of implementing an eviction policy, you may throw a DbException. 
-                if(this.pageIdToPage.size()>=this.numPages){
-                    throw new DbException("More than `numPages` requests have been made for different pages");
-                } else {
-                    // See PageId.java. Return the unique tableid hashcode of this PageId
-                    int tableId = pid.getTableId(); 
-                    // See Catalog.java. Get the Database file using the table id
-                    // Returns the DbFile that can be used to read the contents of the specified table.
-                    DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
-                    // See DbFile.java. Read the Page from the Database file. 
-                    // Read the specified page from disk.
-                    // Hint for lab1: You should use the DbFile.readPage method to access pages of a DbFile.
-                    Page page = dbFile.readPage(pid);
-                    // Add to the buffer pool
-                    this.pageIdToPage.put(pid, page);
-                    return page;
+                if(this.pageToFrame.size()>=this.numPages){
+                    this.evictPage();
                 }
+                // See PageId.java. Return the unique tableid hashcode of this PageId
+                int tableId = pid.getTableId(); 
+                // See Catalog.java. Get the Database file using the table id
+                // Returns the DbFile that can be used to read the contents of the specified table.
+                DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+                // See DbFile.java. Read the Page from the Database file. 
+                // Read the specified page from disk.
+                // Hint for lab1: You should use the DbFile.readPage method to access pages of a DbFile.
+                Page page = dbFile.readPage(pid);
+                // Add to the buffer pool
+                Frame newEntry = new Frame(page, this.currTimeStamp++);
+                this.pageToFrame.put(pid, newEntry);
+                this.minHeap.add(newEntry);
+                return page;
             }
         }
         // return null;
@@ -246,17 +280,21 @@ public class BufferPool {
             // so that future requests see up-to-date pages
 
             // If the page is already in the cache, remove it
-            if (this.pageIdToPage.containsKey(page.getId())) {
-                this.pageIdToPage.remove(page.getId());
+            if (this.pageToFrame.containsKey(page.getId())) {
+                Frame frame = this.pageToFrame.get(page.getId());
+                this.pageToFrame.remove(page.getId());
+                this.minHeap.remove(frame);
             }
             
             // If there is no space in the cache/BufferPool, run the eviction policy
-            if(this.pageIdToPage.size() >= this.numPages) {
+            if(this.pageToFrame.size() >= this.numPages) {
                 this.evictPage();
             } 
 
             // Add the page to the cache
-            this.pageIdToPage.put(page.getId(), page);
+            Frame newEntry = new Frame(page, this.currTimeStamp++);
+            this.pageToFrame.put(page.getId(), newEntry);
+            this.minHeap.add(newEntry);
         }
     }
 
@@ -305,17 +343,21 @@ public class BufferPool {
             // so that future requests see up-to-date pages
 
             // If the page is already in the cache, remove it
-            if (this.pageIdToPage.containsKey(page.getId())) {
-                this.pageIdToPage.remove(page.getId());
+            if (this.pageToFrame.containsKey(page.getId())) {
+                Frame frame = this.pageToFrame.get(page.getId());
+                this.pageToFrame.remove(page.getId());
+                this.minHeap.remove(frame);
             }
             
             // If there is no space in the cache/BufferPool, run the eviction policy
-            if(this.pageIdToPage.size() >= this.numPages) {
+            if(this.pageToFrame.size() >= this.numPages) {
                 this.evictPage();
             } 
 
             // Add the page to the cache
-            this.pageIdToPage.put(page.getId(), page);
+            Frame newEntry = new Frame(page, this.currTimeStamp++);
+            this.pageToFrame.put(page.getId(), newEntry);
+            this.minHeap.add(newEntry);
         }
 
 
@@ -335,6 +377,11 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        Iterator<ConcurrentHashMap.Entry<PageId, Frame>> i = this.pageToFrame.entrySet().iterator();
+
+        while (i.hasNext()) {
+            this.flushPage(i.next().getKey());
+        }
 
     }
 
@@ -351,6 +398,8 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        this.minHeap.remove(this.pageToFrame.get(pid));
+        this.pageToFrame.remove(pid);
     }
 
     /**
@@ -360,6 +409,18 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        Page page = this.pageToFrame.get(pid).get_Page();
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+        TransactionId tid = page.isDirty();
+
+        // Checking if the page is not dirty
+        if (tid == null) { 
+            return;
+        }
+
+        file.writePage(page);
+        this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
+        page.markDirty(false, tid);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -376,6 +437,8 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        Frame frame = this.minHeap.poll();
+        PageId pidToRemove = frame.get_Page().getId();
+        this.pageToFrame.remove(pidToRemove);
     }
-
 }
