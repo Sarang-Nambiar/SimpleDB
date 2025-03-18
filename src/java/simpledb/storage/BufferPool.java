@@ -440,5 +440,11 @@ public class BufferPool {
         Frame frame = this.minHeap.poll();
         PageId pidToRemove = frame.get_Page().getId();
         this.pageToFrame.remove(pidToRemove);
+        
+        try {
+            this.flushPage(pidToRemove); // Write to disk if the page is dirty
+        } catch (IOException e) {
+            throw new DbException("IO error while flushing page");
+        }
     }
 }
