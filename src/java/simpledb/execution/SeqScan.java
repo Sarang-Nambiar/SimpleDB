@@ -6,8 +6,10 @@ import simpledb.transaction.TransactionId;
 import simpledb.common.Type;
 import simpledb.common.DbException;
 import simpledb.storage.DbFileIterator;
+import simpledb.storage.HeapFile;
 import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
+import simpledb.storage.DbFile; // added import
 
 import java.util.*;
 
@@ -15,10 +17,54 @@ import java.util.*;
  * SeqScan is an implementation of a sequential scan access method that reads
  * each tuple of a table in no particular order (e.g., as they are laid out on
  * disk).
+ * 
+ * Operators:
+ * The query parser takes a SQL query and converts it into a logical plan. 
+ * This logical plan represents the SQL query as a tree of relational algebra operators.
+ * The query optimizer will then take this logical plan and convert it into a physical plan composed of 
+ * physical DBIterator operators by applying equivalence rules and cost-based optimization.
+ * 
+ * The DBIterator physical operators are the actual primitives used to execute the query
+ * 
+ * The DbIterator interface lets physical operators fetch tuples from their children using hasNext() 
+ * and next(). These tuples flow starting from the leaves of physical plan tree to the root while 
+ * undergoing transformations performed by intermediate operators. The leaf nodes of the physical plan 
+ * tree are always going to be operators that read tuples from the buffer pool. After the tuples 
+ * reach the root node, they are displayed to the user as query results.
+ * 
+ * Sequential Table Scans is one such physical operator currently supported by SimpleDB
+ * 
+ * Operators are responsible for the actual execution of the query plan. 
+ * They implement the operations of the relational algebra. In SimpleDB, 
+ * operators are iterator based; each operator implements the DbIterator interface.
+ * 
+ * Operators are connected together into a plan by passing lower-level operators into the 
+ * constructors of higher-level operators, i.e., by 'chaining them together.' 
+ * Special access method operators at the leaves of the plan are responsible for reading data 
+ * from the disk (and hence do not have any operators below them).
+ * 
+ * At the top of the plan, the program interacting with SimpleDB simply calls getNext on the root operator; 
+ * this operator then calls getNext on its children, and so on, until these leaf operators are called. 
+ * They fetch tuples from disk and pass them up the tree (as return arguments to getNext); 
+ * tuples propagate up the plan in this way until they are output at the root or combined or 
+ * rejected by another operator in the plan.
+ * 
+ * Sequential Scan: Sequentially scans all of the tuples from the pages of the table specified by the 
+ * tableid in the constructor. This operator should access tuples through the DbFile.iterator() method.
+ * 
+ * 
+ * 
+ * 
  */
 public class SeqScan implements OpIterator {
 
     private static final long serialVersionUID = 1L;
+
+    private TransactionId tId;
+    private int tableId;
+    private String tableAlias;
+    private DbFile file;
+    private DbFileIterator fileIterator;
 
     /**
      * Creates a sequential scan over the specified table as a part of the
@@ -38,6 +84,12 @@ public class SeqScan implements OpIterator {
      */
     public SeqScan(TransactionId tid, int tableid, String tableAlias) {
         // some code goes here
+        this.tId = tid;
+        this.tableId = tableid;
+        this.tableAlias = tableAlias;
+        // Check if its ok to use DbFile
+        this.file = Database.getCatalog().getDatabaseFile(this.tableId);
+        this.fileIterator = this.file.iterator(this.tId);
     }
 
     /**
@@ -47,7 +99,8 @@ public class SeqScan implements OpIterator {
      * */
     public String getTableName() {
 	// some code goes here
-        return null;
+        return Database.getCatalog().getTableName(this.tableId);
+        //return null;
     }
 
     /**
@@ -56,7 +109,8 @@ public class SeqScan implements OpIterator {
     public String getAlias()
     {
         // some code goes here
-        return null;
+        return this.tableAlias;
+        //return null;
     }
 
     /**
@@ -73,6 +127,12 @@ public class SeqScan implements OpIterator {
      */
     public void reset(int tableid, String tableAlias) {
         // some code goes here
+
+        this.tableId = tableid;
+        this.tableAlias = tableAlias;
+        // Check if its ok to use DbFile
+        this.file = Database.getCatalog().getDatabaseFile(this.tableId);
+        this.fileIterator = this.file.iterator(this.tId);
     }
 
     public SeqScan(TransactionId tid, int tableId) {
@@ -81,6 +141,10 @@ public class SeqScan implements OpIterator {
 
     public void open() throws DbException, TransactionAbortedException {
         // some code goes here
+
+        // Sequential Scan: Sequentially scans all of the tuples from the pages of the table specified by the 
+        // *tableid in the constructor. This operator should access tuples through the DbFile.iterator() method
+        this.fileIterator.open();
     }
 
     /**
@@ -95,26 +159,44 @@ public class SeqScan implements OpIterator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+
+        TupleDesc old_td = this.file.getTupleDesc();
+        // See TupleDesc.java
+        Type[] new_tdTypeArr = new Type[old_td.numFields()];
+        String[] new_tdFieldArr = new String[old_td.numFields()];
+
+        for(int i=0; i < old_td.numFields(); i++) {
+            new_tdTypeArr[i] = old_td.getFieldType(i);
+            // alias and name should be separated with a "." character: alias.fieldName
+            new_tdFieldArr[i] = this.tableAlias + "." + old_td.getFieldName(i);
+        }
+
+        TupleDesc new_td = new TupleDesc(new_tdTypeArr, new_tdFieldArr);
+        return new_td;
+        //return null;
     }
 
     public boolean hasNext() throws TransactionAbortedException, DbException {
         // some code goes here
-        return false;
+        return this.fileIterator.hasNext();
+        //return false;
     }
 
     public Tuple next() throws NoSuchElementException,
             TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        return this.fileIterator.next();
+        //return null;
     }
 
     public void close() {
         // some code goes here
+        this.fileIterator.close();
     }
 
     public void rewind() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        this.fileIterator.rewind();
     }
 }

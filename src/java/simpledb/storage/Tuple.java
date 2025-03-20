@@ -3,13 +3,34 @@ package simpledb.storage;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 
 /**
  * Tuple maintains information about the contents of a tuple. Tuples have a
  * specified schema specified by a TupleDesc object and contain Field objects
  * with the data for each field.
+ * 
+ * Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
+ * `Field`: interface that different data types implement
+ * Tuples have a type/schema represented by `TupleDesc` object
+ * `TupleDesc` object consists of a collection of `Type` objects, one per field in the tuple
+ * `Type`: Describes the type of the corresponding field
+ * 
+ * 
+ * 
+ * TO DO
+ * - Check if modifyRecordId is required because it fails.
+ * - modifyRecordId() test failed due to " +
+   "RecordId.equals() not being implemented.  This is not required for Lab 1, " +
+   "but should pass when you do implement the RecordId class."
+ *
+ * 
+ * 
  */
 public class Tuple implements Serializable {
+
+    // Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
+    private Field[] fields;
 
     private static final long serialVersionUID = 1L;
     private TupleDesc td;
@@ -22,19 +43,32 @@ public class Tuple implements Serializable {
      *            instance with at least one field.
      */
     public Tuple(TupleDesc td) {
-        // some code goes here
+        // provided
         this.td = td;
         this.recordId = null;
+        // some code goes here
+        // Initialise an empty collection of field objects with the specified number taken from the tuple's schema:
+        // TupleDesc
+        this.fields = new Field[td.numFields()];
     }
+
+
+
+
 
     /**
      * @return The TupleDesc representing the schema of this tuple.
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
+        // code already provided. done(?), get the TupleDesc (td) so just return it
         return this.td;
         // return null;
     }
+
+
+
+
 
     /**
      * @return The RecordId representing the location of this tuple on disk. May
@@ -43,8 +77,13 @@ public class Tuple implements Serializable {
     public RecordId getRecordId() {
         // some code goes here
         // return null;
+        // code already provided. done(?), get the RecordID (recordId) so just return it
         return this.recordId;
     }
+
+
+
+
 
     /**
      * Set the RecordId information for this tuple.
@@ -54,8 +93,13 @@ public class Tuple implements Serializable {
      */
     public void setRecordId(RecordId rid) {
         // some code goes here
+        // code already provided. done(?) set the RecordID (recordId) so just set it
         this.recordId = rid;
     }
+
+
+
+
 
     /**
      * Change the value of the ith field of this tuple.
@@ -67,7 +111,23 @@ public class Tuple implements Serializable {
      */
     public void setField(int i, Field f) {
         // some code goes here
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds
+         */
+        if(i<0 || i>this.fields.length-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
+        // Recall: Tuples consist of a collection of `Field` objects, one per field in the `Tuple`
+        this.fields[i] = f;
     }
+
+
+
+
 
     /**
      * @return the value of the ith field, or null if it has not been set.
@@ -77,9 +137,24 @@ public class Tuple implements Serializable {
      */
     public Field getField(int i) {
         // some code goes here
-        return null;
+        /*
+         * What are some extra possible errors we need to handle?
+         * 
+         * - index provided is out of bounds
+         */
+        if(i<0 || i>this.fields.length-1){
+            throw new NoSuchElementException("Index i is not a valid field reference");
+        }
+
+
+        return this.fields[i];
+        // return null;
     }
 
+
+
+
+    
     /**
      * Returns the contents of this Tuple as a string. Note that to pass the
      * system tests, the format needs to be as follows:
@@ -90,8 +165,20 @@ public class Tuple implements Serializable {
      */
     public String toString() {
         // some code goes here
-        throw new UnsupportedOperationException("Implement this");
+        // throw new UnsupportedOperationException("Implement this");
+        StringBuilder sb = new StringBuilder();
+        for(int i=0; i<this.fields.length;i++){
+            if(i==this.fields.length){
+                sb.append(this.fields[i]);
+            }
+            else {
+                sb.append(this.fields[i] + " ");
+            }
+        }
+        return sb.toString();
     }
+
+
 
     /**
      * @return
@@ -100,8 +187,11 @@ public class Tuple implements Serializable {
     public Iterator<Field> fields()
     {
         // some code goes here
-        return null;
+        //return null;
+        return Arrays.asList(this.fields).iterator();
     }
+
+
 
     /**
      * reset the TupleDesc of this tuple (only affecting the TupleDesc)
@@ -109,5 +199,6 @@ public class Tuple implements Serializable {
     public void resetTupleDesc(TupleDesc td)
     {
         // some code goes here
+        this.td = td;
     }
 }

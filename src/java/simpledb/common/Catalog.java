@@ -19,9 +19,38 @@ import java.util.concurrent.ConcurrentHashMap;
  * user program before it can be used -- eventually, this should be converted
  * to a catalog that reads a catalog table from disk.
  * 
+ * The Catalog (singleton) object manages adding new tables and viewing schemas and primary keys
+ * 
+ * Catalog class consists of a list of the tables as well as the schemas of the tables that are in 
+ * the database
+ * 
+ * Need to write code to add a new table and get information about a particular table
+ * 
+ * Each table has an associated TupleDesc object that allows operators to determine the 
+ * types and number of fields in a table (schema)
+ * 
+ * The global catalog is a single instance of Catalog that is allocated for the entire SimpleDB process
+ * - Can be retrieved via Database.getCatalog()
+ * 
+ * 
+ * Tuples are stored in pages, which are stored on disk. Pages belonging to the 
+ * same table are grouped together under the same DbFile instance, which 
+ * provides an interface to read/write pages and tuples to disk. 
+ * Each database table is stored as a DbFile instance.
+ * DbFile Interface (aka table) -> Page 1...Page N. Each entry in a page is a tuple
+ * Each column is a field
+ * 
+ * 
+ * 
  * @Threadsafe
  */
 public class Catalog {
+
+
+    // Mapping tables
+    private ConcurrentHashMap<String, DbFile> tableNameToDbFile; 
+    private ConcurrentHashMap<Integer, DbFile> tableIdToDbFile; 
+    private ConcurrentHashMap<Integer, String> tableIdToPriKey; 
 
     /**
      * Constructor.
@@ -29,6 +58,16 @@ public class Catalog {
      */
     public Catalog() {
         // some code goes here
+
+        /*
+        Python dictionary equivalent is ConcurrentHashMap
+        https://www.geeksforgeeks.org/concurrenthashmap-in-java/
+        */
+
+       // Mapping tables
+       tableNameToDbFile = new ConcurrentHashMap<String, DbFile>(); 
+       tableIdToDbFile = new ConcurrentHashMap<Integer, DbFile>(); 
+       tableIdToPriKey = new ConcurrentHashMap<Integer, String>(); 
     }
 
     /**
@@ -42,6 +81,72 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
+
+        /**
+         * If there exists a table with the same name or ID, replace that old table with this one. 
+         * file: (DbFile) contents of table to add. file.getId() -> Identifier of the table file
+         * name: Name of the table. Can be empty string but cannot be null
+         * pkeyField: Name of primary key field
+         * 
+         * Handle case where 
+         * - a duplicate id exists in tableIdtoDbFile (CatalogTest.java)
+         *  - Need to remove the entry in tableIdtoDbFile
+         *  - Need to remove the entry in tableIdtoPriKey
+         *  - Need to remove the old name entry reference in tableNametoDbFile if not it will fail the getTableName() -> Duplicate file checks
+         *  - Need to add the new id and name entry references
+         * 
+         * - a duplicate id exists in tableIdtoPriKey (potentially?)
+         *  - Need to remove the entry in tableIdtoDbFile
+         *  - Need to remove the entry in tableIdtoPriKey
+         *  - Need to remove the old name entry reference in tableNametoDbFile
+         *  - Need to add the new id and name entry references
+         * 
+         * - a duplicate name exists in tableNametoDbFile (potentially?)
+         *  - Need to remove the entry in tableNametoDbFile
+         *  - Need to remove the entry in tableIdtoPriKey
+         *  - Need to remove the old id entry reference in tableIdtoDbFile 
+         *  - Need to add the new id and name entry references
+         */
+
+        // name cannot be null
+        if(name==null){
+            throw new IllegalArgumentException("Name cannot be null");
+        }
+
+        // no need to check for primary key duplicates because it can be "" (see method below)
+
+        Integer tableId = file.getId();
+
+        // Handle Duplicate cases
+        if(this.tableIdToDbFile.containsKey(tableId) || this.tableNameToDbFile.containsKey(name) || this.tableIdToPriKey.containsKey(tableId)) {
+            
+            // Try removing the old id entry reference in tableIdtoDbFile
+            if(this.tableIdToDbFile.containsKey(tableId)) {
+                this.tableIdToDbFile.remove(tableId);
+            }
+
+
+            // Try removing the old id entry reference in tableIdtoPriKey
+            if(this.tableIdToPriKey.containsKey(tableId)) {
+                this.tableIdToPriKey.remove(tableId);
+            }
+
+
+            // Try removing the old name entry reference in tableNametoDbFile
+            for (Map.Entry<String, DbFile> entry: this.tableNameToDbFile.entrySet()) {
+                String key = entry.getKey();
+                DbFile value = entry.getValue();
+                if(value.getId()==tableId) {
+                    this.tableNameToDbFile.remove(key);
+                    break;
+                }
+            }
+        }
+
+
+        this.tableNameToDbFile.put(name, file);
+        this.tableIdToDbFile.put(tableId, file);
+        this.tableIdToPriKey.put(tableId, pkeyField);
     }
 
     public void addTable(DbFile file, String name) {
@@ -65,7 +170,18 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+
+        // See CatalogTest.java nameThisTestRun var
+        if(name==null) {
+            throw new NoSuchElementException("Name cannot be null");
+        }
+
+        if(this.tableNameToDbFile.containsKey(name)) {
+            return this.tableNameToDbFile.get(name).getId();
+        } else{
+            throw new NoSuchElementException("The table with the specified name does not exist");
+        }
+        // return 0;
     }
 
     /**
@@ -76,7 +192,14 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+
+        if(this.tableIdToDbFile.containsKey(tableid)) {
+            // See simmpledb/storage/DbFile.java for DbFile interface
+            return this.tableIdToDbFile.get(tableid).getTupleDesc();
+        } else {
+            throw new NoSuchElementException("The table with the specified id does not exist");
+        }
+        //return null;
     }
 
     /**
@@ -87,27 +210,65 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        // todo: check if need to throw exception
+
+        if(this.tableIdToDbFile.containsKey(tableid)) {
+            return this.tableIdToDbFile.get(tableid);
+        } else {
+            throw new NoSuchElementException("The table with the specified id does not exist");
+        }
+        //return null;
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        return null;
+        // todo: check if error is needed
+
+        if(this.tableIdToPriKey.containsKey(tableid)) {
+            return this.tableIdToPriKey.get(tableid);
+        } else {
+            throw new NoSuchElementException("The table with the specified id does not exist");
+        }
+        //return null;
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return null;
+
+        // https://www.geeksforgeeks.org/concurrenthashmap-in-java/
+        return this.tableIdToDbFile.keySet().iterator();
+        // return null;
     }
 
     public String getTableName(int id) {
         // some code goes here
+
+        // todo: check if error is needed
+        // https://stackoverflow.com/questions/1066589/iterate-through-a-hashmap
+        if(this.tableIdToDbFile.containsKey(id)) {
+            for (Map.Entry<String, DbFile> entry: tableNameToDbFile.entrySet()) {
+                String key = entry.getKey();
+                DbFile value = entry.getValue();
+                if(value.getId()==id) {
+                    return key;
+                }
+            }
+        } else {
+            throw new NoSuchElementException("The specified id does not exist");
+        }
+
+        //todo: why is this required
         return null;
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
         // some code goes here
+
+        // https://www.geeksforgeeks.org/java-concurrenthashmap-clear/
+        tableNameToDbFile.clear();
+        tableIdToDbFile.clear();
+        tableIdToPriKey.clear();
     }
     
     /**

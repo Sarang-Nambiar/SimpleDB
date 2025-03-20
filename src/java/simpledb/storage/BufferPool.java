@@ -8,7 +8,9 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
-
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -19,6 +21,40 @@ import java.util.concurrent.ConcurrentHashMap;
  * The BufferPool is also responsible for locking;  when a transaction fetches
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
+ * 
+ * 
+ * Tuples are stored in pages, which are stored on disk. Pages belonging to the 
+ * same table are grouped together under the same DbFile instance, which 
+ * provides an interface to read/write pages and tuples to disk. 
+ * Each database table is stored as a DbFile instance.
+ * DbFile Interface (aka table) -> Page 1...Page N. Each entry in a page is a tuple
+ * Each column is a field
+ * 
+ * 
+ * The BufferPool singleton object manages all page access and modifications. 
+ * Because BufferPool has a global view of all page accesses, it can cache 
+ * frequently used pages in memory so that page fetches doesn’t always go to disk. 
+ * Once the BufferPool cache gets full, it will need to evict pages using some 
+ * eviction algorithm. The BufferPool evicts pages using the no-steal algorithm to 
+ * provide ACID transaction guarantees, which is discussed more in the Transactions 
+ * section
+ * 
+ * 
+ * BufferPool is responsible for caching pages in memory that have been 
+ * recently read from disk. 
+ * All operators read and write pages from various files on disk through the 
+ * buffer pool. It consists of a fixed number of pages, defined by the `numPages` 
+ * parameter to the `BufferPool` constructor. 
+ * In later labs, you will implement an eviction policy. 
+ * 
+ * 
+ * For this lab, you only need to implement the constructor and the 
+ * `BufferPool.getPage()` method used by the SeqScan operator. 
+ * The BufferPool should store up to `numPages` pages. For this lab, 
+ * if more than `numPages` requests are made for different pages, then 
+ * instead of implementing an eviction policy, you may throw a DbException. 
+ * In future labs you will be required to implement an eviction policy.
+ * 
  * 
  * @Threadsafe, all fields are final
  */
@@ -33,6 +69,46 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    // BufferPool should use the numPages argument to the
+    // constructor
+    private int numPages; 
+
+    private class Frame {
+        private Page page;
+        private int timestamp; // The current pin count of the buffer pool
+        
+        public Frame(Page page, int timestamp) {
+            this.page = page;
+            this.timestamp = timestamp;
+        }
+
+        public Page get_Page() {
+            return this.page;
+        }
+
+        public int getTimeStamp() {
+            return this.timestamp;
+        }
+
+        public void set_Page(Page p) {
+            this.page = p;
+        }
+
+        public void setTimeStamp(int timestamp) {
+            this.timestamp = timestamp;
+        }
+    }
+    private int currTimeStamp = 1;
+    private ConcurrentHashMap<PageId, Frame> pageToFrame;
+    private PriorityQueue<Frame> minHeap;
+
+
+    // Define a simple intrinsic lock: Recall, every Java object
+    // can implictly act as a lock for purposes of synchronisation
+    // Intrinsic locks act as mutexes (mutual exclusion locks)
+    // At most 1 thread may own the lock
+    private static Object simpleLock = new Object();
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +116,9 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.numPages = numPages;
+        this.pageToFrame = new ConcurrentHashMap<>();
+        this.minHeap = new PriorityQueue<>( (p1, p2) -> Integer.compare(p1.getTimeStamp(), p2.getTimeStamp()) );
     }
     
     public static int getPageSize() {
@@ -71,10 +150,43 @@ public class BufferPool {
      * @param pid the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+
+        // Try to acquire a lock to run critical section code that may access
+        // shared resources
+        // https://www.baeldung.com/java-mutex
+        synchronized(simpleLock) {
+            // The retrieved page should be looked up in the buffer pool. If it is present, it should be returned
+            if(this.pageToFrame.containsKey(pid)) {
+                this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
+                return this.pageToFrame.get(pid).get_Page();
+            // If it is not present, it should be added to the buffer pool and returned.
+            } else {
+                // If there is insufficient space in the buffer pool
+                // For this lab, if more than `numPages` requests are made for different pages, then 
+                // instead of implementing an eviction policy, you may throw a DbException. 
+                if(this.pageToFrame.size()>=this.numPages){
+                    this.evictPage();
+                }
+                // See PageId.java. Return the unique tableid hashcode of this PageId
+                int tableId = pid.getTableId(); 
+                // See Catalog.java. Get the Database file using the table id
+                // Returns the DbFile that can be used to read the contents of the specified table.
+                DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+                // See DbFile.java. Read the Page from the Database file. 
+                // Read the specified page from disk.
+                // Hint for lab1: You should use the DbFile.readPage method to access pages of a DbFile.
+                Page page = dbFile.readPage(pid);
+                // Add to the buffer pool
+                Frame newEntry = new Frame(page, this.currTimeStamp++);
+                this.pageToFrame.put(pid, newEntry);
+                this.minHeap.add(newEntry);
+                return page;
+            }
+        }
+        // return null;
     }
 
     /**
@@ -120,6 +232,13 @@ public class BufferPool {
         // not necessary for lab1|lab2
     }
 
+
+
+
+
+
+
+
     /**
      * Add a tuple to the specified table on behalf of transaction tid.  Will
      * acquire a write lock on the page the tuple is added to and any other 
@@ -139,7 +258,50 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
+        // Lock acquisition is not needed for lab2
+
+        // These methods should call the appropriate methods in the HeapFile that 
+        // belong to the table being modified 
+        // (this extra level of indirection is needed to support other types of files 
+        // — like indices — in the future)
+        
+        // Get the HeapFile
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        // Add a tuple to the specified table on behalf of transaction tid
+        // Get the modified pages
+        ArrayList<Page> modified_pages = (ArrayList<Page>) file.insertTuple(tid, t);
+
+        for(Page page: modified_pages) {
+            // Pages are already marked dirty by file.insertTuple
+            // All pages in this loop are dirty 
+            // Add the versions of these pages to the cache
+            // i.e. (replacing any existing versions of those pages)
+            // so that future requests see up-to-date pages
+
+            // If the page is already in the cache, remove it
+            if (this.pageToFrame.containsKey(page.getId())) {
+                Frame frame = this.pageToFrame.get(page.getId());
+                this.pageToFrame.remove(page.getId());
+                this.minHeap.remove(frame);
+            }
+            
+            // If there is no space in the cache/BufferPool, run the eviction policy
+            if(this.pageToFrame.size() >= this.numPages) {
+                this.evictPage();
+            } 
+
+            // Add the page to the cache
+            Frame newEntry = new Frame(page, this.currTimeStamp++);
+            this.pageToFrame.put(page.getId(), newEntry);
+            this.minHeap.add(newEntry);
+        }
     }
+
+
+
+
+
 
     /**
      * Remove the specified tuple from the buffer pool.
@@ -158,7 +320,54 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        // Lab 2
+
+        // Lock acquisition is not needed for lab2
+
+        // These methods should call the appropriate methods in the HeapFile that 
+        // belong to the table being modified 
+        // (this extra level of indirection is needed to support other types of files 
+        // — like indices — in the future)
+        
+        // Get the HeapFile
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        // Delete a tuple from the specified table on behalf of transaction tid
+        // Get the modified pages
+        ArrayList<Page> modified_pages = (ArrayList<Page>) file.deleteTuple(tid, t);
+
+        for(Page page: modified_pages) {
+            // Pages are already marked dirty by file.insertTuple
+            // All pages in this loop are dirty 
+            // Add the versions of these pages to the cache
+            // i.e. (replacing any existing versions of those pages)
+            // so that future requests see up-to-date pages
+
+            // If the page is already in the cache, remove it
+            if (this.pageToFrame.containsKey(page.getId())) {
+                Frame frame = this.pageToFrame.get(page.getId());
+                this.pageToFrame.remove(page.getId());
+                this.minHeap.remove(frame);
+            }
+            
+            // If there is no space in the cache/BufferPool, run the eviction policy
+            if(this.pageToFrame.size() >= this.numPages) {
+                this.evictPage();
+            } 
+
+            // Add the page to the cache
+            Frame newEntry = new Frame(page, this.currTimeStamp++);
+            this.pageToFrame.put(page.getId(), newEntry);
+            this.minHeap.add(newEntry);
+        }
+
+
     }
+
+
+
+
+
+
 
     /**
      * Flush all dirty pages to disk.
@@ -168,8 +377,15 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        Iterator<ConcurrentHashMap.Entry<PageId, Frame>> i = this.pageToFrame.entrySet().iterator();
+
+        while (i.hasNext()) {
+            this.flushPage(i.next().getKey());
+        }
 
     }
+
+
 
     /** Remove the specific page id from the buffer pool.
         Needed by the recovery manager to ensure that the
@@ -182,6 +398,8 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        this.minHeap.remove(this.pageToFrame.get(pid));
+        this.pageToFrame.remove(pid);
     }
 
     /**
@@ -191,6 +409,18 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        Page page = this.pageToFrame.get(pid).get_Page();
+        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+        TransactionId tid = page.isDirty();
+
+        // Checking if the page is not dirty
+        if (tid == null) { 
+            return;
+        }
+
+        file.writePage(page);
+        this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
+        page.markDirty(false, tid);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -207,6 +437,13 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        Frame frame = this.minHeap.poll();
+        PageId pidToRemove = frame.get_Page().getId();
+        try {
+            this.flushPage(pidToRemove); // Write to disk if the page is dirty
+        } catch (IOException e) {
+            throw new DbException("IO error while flushing page");
+        }
+        this.pageToFrame.remove(pidToRemove);
     }
-
 }
