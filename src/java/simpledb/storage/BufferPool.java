@@ -75,11 +75,11 @@ public class BufferPool {
 
     private class Frame {
         private Page page;
-        private int pinCount; // The current pin count of the buffer pool
+        private int timestamp; // The current pin count of the buffer pool
         
-        public Frame(Page page, int pinCount) {
+        public Frame(Page page, int timestamp) {
             this.page = page;
-            this.pinCount = pinCount;
+            this.timestamp = timestamp;
         }
 
         public Page get_Page() {
@@ -87,15 +87,15 @@ public class BufferPool {
         }
 
         public int getTimeStamp() {
-            return this.pinCount;
+            return this.timestamp;
         }
 
         public void set_Page(Page p) {
             this.page = p;
         }
 
-        public void setTimeStamp(int pincount) {
-            this.pinCount = pincount;
+        public void setTimeStamp(int timestamp) {
+            this.timestamp = timestamp;
         }
     }
     private int currTimeStamp = 1;
@@ -440,5 +440,11 @@ public class BufferPool {
         Frame frame = this.minHeap.poll();
         PageId pidToRemove = frame.get_Page().getId();
         this.pageToFrame.remove(pidToRemove);
+        
+        try {
+            this.flushPage(pidToRemove); // Write to disk if the page is dirty
+        } catch (IOException e) {
+            throw new DbException("IO error while flushing page");
+        }
     }
 }
