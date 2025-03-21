@@ -1,3 +1,30 @@
+## **Tests**
+
+| Test Name                                 | Result            | Remarks |
+|-------------------------------------------|-------------------|---------|
+| ant runtest -Dtest=PredicateTest          | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=JoinPredicateTest      | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=FilterTest             | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=JoinTest               |                   |  Test could not be found       |
+| ant runsystest -Dtest=FilterTest          | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=JoinTest            | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=IntegerAggregatorTest  | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=StringAggregatorTest   | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=AggregateTest          | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=AggregateTest       | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=HeapPageWriteTest      | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=HeapFileWriteTest      | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=BufferPoolWriteTest    | BUILD SUCCESSFUL  |         |
+| ant runtest -Dtest=InsertTest             | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=InsertTest          | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=DeleteTest          | BUILD SUCCESSFUL  |         |
+| ant runsystest -Dtest=EvictionTest        | BUILD SUCCESSFUL  |         |
+
+
+<br/>
+<br/>
+<br/>
+
 ## **Final Test**
 
 - Create ```some_data_file1.txt``` Remember to enter a new line after the last line.
