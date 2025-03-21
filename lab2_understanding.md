@@ -5,7 +5,7 @@
 | ant runtest -Dtest=PredicateTest          | BUILD SUCCESSFUL  |         |
 | ant runtest -Dtest=JoinPredicateTest      | BUILD SUCCESSFUL  |         |
 | ant runtest -Dtest=FilterTest             | BUILD SUCCESSFUL  |         |
-| ant runtest -Dtest=JoinTest               |                   |  Test could not be found       |
+| ant runtest -Dtest=JoinTest               | BUILD SUCCESSFUL  |         |
 | ant runsystest -Dtest=FilterTest          | BUILD SUCCESSFUL  |         |
 | ant runsystest -Dtest=JoinTest            | BUILD SUCCESSFUL  |         |
 | ant runtest -Dtest=IntegerAggregatorTest  | BUILD SUCCESSFUL  |         |
@@ -50,7 +50,7 @@
 - Run ```ant```
 - Run ```java -jar dist/simpledb.jar convert some_data_file1.txt 3```
 - Run ```java -jar dist/simpledb.jar convert some_data_file2.txt 3```
-- Create ```jointest.java``` under ```src/java/simpledb/``` and copy the code from GitHub
+- Create ```lab2customtestjoin.java``` under ```src/java/simpledb/``` and copy the code from GitHub
     - Add the follow imports:
         ```
         import simpledb.common.*;
@@ -58,9 +58,10 @@
         import simpledb.execution.*;
         import simpledb.transaction.*;
         ```
+    - Rename the class name in the code to ```lab2customtestjoin```
 
 - Run ```ant```
-- Run ```java -classpath dist/simpledb.jar simpledb.jointest```
+- Run ```java -classpath dist/simpledb.jar simpledb.lab2customtestjoin```
 - Expected output
 
 ```
