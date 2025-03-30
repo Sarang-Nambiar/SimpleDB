@@ -154,6 +154,23 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
         // some code goes here
 
+        // Lab3
+        // Acquire lock and block before returning a page
+        if(perm==Permissions.READ_ONLY) {
+            while(!this.lockManager.acquireSharedLock(tid, pid)) {
+                continue;
+            }
+        } else if(perm==Permissions.READ_WRITE) {
+            while(!this.lockManager.acquireExclusiveLock(tid, pid)) {
+                continue;
+            }
+        }
+
+
+        // Still necessary to have a simple intrinsic mutex lock to prevent race conditions for shared/read lock
+        // - Example: Concurrent access to read a page (shared lock). There may be a duplicate insertion into the BufferPool with potentially incorrect timestamp 
+        // - Example: Eviction policy. Accessing a page (shared lock) that does not exist -> May evict pages 2x (incorrectly) and insert them 2x (incorrect)
+        // For instance, one thread that wants to evict a page and another thread that wants to use that page
         // Try to acquire a lock to run critical section code that may access
         // shared resources
         // https://www.baeldung.com/java-mutex
@@ -189,6 +206,9 @@ public class BufferPool {
         // return null;
     }
 
+
+
+
     /**
      * Releases the lock on a page.
      * Calling this is very risky, and may result in wrong behavior. Think hard
@@ -201,7 +221,14 @@ public class BufferPool {
     public  void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+
+        // Lab3
+        // Instructions said that this is primarily used for testing and at the end of transactions
+        // Arguments are a hint that the method should take tid, pid
+        this.lockManager.releaseLock(tid,pid);
     }
+
+
 
     /**
      * Release all locks associated with a given transaction.
@@ -213,12 +240,22 @@ public class BufferPool {
         // not necessary for lab1|lab2
     }
 
+
+
+
     /** Return true if the specified transaction has a lock on the specified page */
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+
+        // Lab3
+        // Helps to determine whether a page is already locked by a transaction
+        return this.lockManager.holdsLock(tid,p);
+        //return false;
     }
+
+
+
 
     /**
      * Commit or abort a given transaction; release all locks associated to
