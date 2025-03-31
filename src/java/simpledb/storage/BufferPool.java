@@ -6,6 +6,7 @@ import simpledb.common.DbException;
 import simpledb.common.DeadlockException;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
+import simpledb.transaction.LockManager;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -102,12 +103,8 @@ public class BufferPool {
     private ConcurrentHashMap<PageId, Frame> pageToFrame;
     private PriorityQueue<Frame> minHeap;
 
-
-    // Define a simple intrinsic lock: Recall, every Java object
-    // can implictly act as a lock for purposes of synchronisation
-    // Intrinsic locks act as mutexes (mutual exclusion locks)
-    // At most 1 thread may own the lock
-    private static Object simpleLock = new Object();
+    // Lab 3
+    private final LockManager lockManager;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -119,6 +116,8 @@ public class BufferPool {
         this.numPages = numPages;
         this.pageToFrame = new ConcurrentHashMap<>();
         this.minHeap = new PriorityQueue<>( (p1, p2) -> Integer.compare(p1.getTimeStamp(), p2.getTimeStamp()) );
+        // Lab 3
+        this.lockManager = new LockManager();
     }
     
     public static int getPageSize() {
@@ -155,26 +154,29 @@ public class BufferPool {
         // some code goes here
 
         // Lab3
-        // Acquire lock and block before returning a page
-        if(perm==Permissions.READ_ONLY) {
-            while(!this.lockManager.acquireSharedLock(tid, pid)) {
-                continue;
-            }
-        } else if(perm==Permissions.READ_WRITE) {
-            while(!this.lockManager.acquireExclusiveLock(tid, pid)) {
-                continue;
-            }
+        /*
+         * Transactions: Group of DB actions
+         * It should always seem like the operations in a transaction were executed as a single, indivisible action
+         * Use Strict 2PL for concurrency control and lock data at Page-Level
+         * 
+         * Locks are grabbed from the LockManager when a page is fetched from BufferPool
+         * The page fetch function blocks until the page’s lock is acquired from the LockManager
+         * 
+         * Add call to SimpleDB in the BufferPool that allows a caller to request a lock
+         * on a specific object 
+         * 
+         * Modify getPage() to block and acquire the desired lock before returning a page
+         */
+
+        if (perm == Permissions.READ_ONLY) {
+            this.lockManager.acquireSharedLock(tid, pid);
+        } else if (perm == Permissions.READ_WRITE) {
+            this.lockManager.acquireExclusiveLock(tid, pid);
         }
 
 
-        // Still necessary to have a simple intrinsic mutex lock to prevent race conditions for shared/read lock
-        // - Example: Concurrent access to read a page (shared lock). There may be a duplicate insertion into the BufferPool with potentially incorrect timestamp 
-        // - Example: Eviction policy. Accessing a page (shared lock) that does not exist -> May evict pages 2x (incorrectly) and insert them 2x (incorrect)
-        // For instance, one thread that wants to evict a page and another thread that wants to use that page
-        // Try to acquire a lock to run critical section code that may access
-        // shared resources
-        // https://www.baeldung.com/java-mutex
-        synchronized(simpleLock) {
+        // Still necessary to have a simple intrinsic mutex lock to prevent race conditions for shared/read lock as there's modification
+        synchronized(this) {
             // The retrieved page should be looked up in the buffer pool. If it is present, it should be returned
             if(this.pageToFrame.containsKey(pid)) {
                 this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
@@ -222,10 +224,18 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
 
-        // Lab3
-        // Instructions said that this is primarily used for testing and at the end of transactions
-        // Arguments are a hint that the method should take tid, pid
-        this.lockManager.releaseLock(tid,pid);
+        /*
+         * Lab 3
+         * 
+         * Add call to SimpleDB in the BufferPool that allows a caller to release a lock
+         * on a specific object 
+         * 
+         * Instructions said that this method is primarily used for testing and at the end of transactions
+         * 
+         */
+
+         // Help a transaction release a lock from a page
+        lockManager.releaseOneTransactionLock(tid, pid);
     }
 
 
@@ -250,8 +260,7 @@ public class BufferPool {
 
         // Lab3
         // Helps to determine whether a page is already locked by a transaction
-        return this.lockManager.holdsLock(tid,p);
-        //return false;
+        return lockManager.holdsLock(tid, p);
     }
 
 
