@@ -32,10 +32,14 @@ public class PageLock {
          * An EL request will be blocked until all SL on the page are released
          */
 
-        // If the SL is already held by the transaction or the transaction is already trying to acquire the SL, just return
-        if(SLholders.contains(tid) || SLacquirers.contains(tid)) return;
+        // If the transaction already has a SL/EL or is trying to acquire a SL/EL, return
+        // We need to check for EL because if we don't, when the transaction enters the critical section
+        // ELholders.size() will still be > 0, it will be waiting for itself to release the lock. The test will hang
+        // (according to how the test case acquireWriteAndReadLocks() is written)
+        // Addresses the test case acquireWriteAndReadLocks() -> If it already has an EL, it technically also has a SL (I think this is what they're testing)
+        // "A single transaction should be able to acquire a read lock after it already has a write lock"
+        if(SLholders.contains(tid) || SLacquirers.contains(tid) || ELholder.contains(tid) || ELacquirers.contains(tid)) return;
 
-        Debug.log("TID " + tid + " acquiring shared lock on page ");
         // Critical Section because it contains modification
         synchronized (this) {
             // Add the transaction as an acquirer for potential deadlock detection
@@ -56,7 +60,6 @@ public class PageLock {
             // Remove the transaction from SL acquirers
             SLacquirers.remove(tid);
         }
-        Debug.log("TID " + tid + " acquired shared lock on page ");
     }
 
 
@@ -68,9 +71,10 @@ public class PageLock {
          * ALL other lock requests are blocked until the EL is released
          */
 
-        // If the EL is already held by the transaction or the transaction is already trying to acquire the EL, just return
+        // If the transaction already has an EL or is trying to acquire an EL, return
+        // Allow transaction to hold SL because of the possibility to upgrade to EL
         if(ELholder.contains(tid) || ELacquirers.contains(tid)) return;
-        Debug.log("TID " + tid + " acquiring exclusive lock on page ");
+
         // Critical Section because it contains modification
         synchronized (this) {
             // Add the transaction as an acquirer for potential deadlock detection
@@ -107,7 +111,6 @@ public class PageLock {
             // Remove the transaction from EL acquirers
             ELacquirers.remove(tid);
         }
-        Debug.log("TID " + tid + " acquired exclusive lock on page ");
     }
 
 
