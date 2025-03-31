@@ -2,6 +2,7 @@ package simpledb.transaction;
 import java.util.HashSet;
 import simpledb.storage.PageId;
 
+
 // Define a custom lock to lock on the page
 public class PageLock {
     // Define the PageId that this lock is for
@@ -34,6 +35,7 @@ public class PageLock {
         // If the SL is already held by the transaction or the transaction is already trying to acquire the SL, just return
         if(SLholders.contains(tid) || SLacquirers.contains(tid)) return;
 
+        Debug.log("TID " + tid + " acquiring shared lock on page ");
         // Critical Section because it contains modification
         synchronized (this) {
             // Add the transaction as an acquirer for potential deadlock detection
@@ -54,6 +56,7 @@ public class PageLock {
             // Remove the transaction from SL acquirers
             SLacquirers.remove(tid);
         }
+        Debug.log("TID " + tid + " acquired shared lock on page ");
     }
 
 
@@ -67,7 +70,7 @@ public class PageLock {
 
         // If the EL is already held by the transaction or the transaction is already trying to acquire the EL, just return
         if(ELholder.contains(tid) || ELacquirers.contains(tid)) return;
-
+        Debug.log("TID " + tid + " acquiring exclusive lock on page ");
         // Critical Section because it contains modification
         synchronized (this) {
             // Add the transaction as an acquirer for potential deadlock detection
@@ -104,6 +107,7 @@ public class PageLock {
             // Remove the transaction from EL acquirers
             ELacquirers.remove(tid);
         }
+        Debug.log("TID " + tid + " acquired exclusive lock on page ");
     }
 
 

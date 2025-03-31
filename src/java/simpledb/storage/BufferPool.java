@@ -57,6 +57,53 @@ import java.util.concurrent.ConcurrentHashMap;
  * In future labs you will be required to implement an eviction policy.
  * 
  * 
+ * Lab 3
+ * Need to implement Strict 2PL: Transactions should acquire the appropriate type of lock on any object 
+ * before accessing that object and shouldn't release any locks until after the transaction commits
+ * 
+ * Transaction commit (transactionComplete) is done in Exercise 4
+ * 
+ * It is possible to obtain locks on pages in BufferPool.getPage() before you read or modify them.
+ * Recommended to acquire locks in getPage(). It is possible that we do not need to acquire a lock anywhere else
+ * 
+ * Need to acquire a shared lock on any page (or tuple) before you read it
+ * Need to acquire an exclusive lock on any page (or tuple) before you write it
+ * 
+ * Permissions objects in the BufferPool indicate the type of lock that the caller would like to have 
+ * on the object being accessed
+ * 
+ * Double check that implementation of BufferPool.insertTuple() and BufferPool.deleteTupe() 
+ * call markDirty() on any of the pages they access
+ * 
+ * After acquiring locks, think about when to release
+ * - Clear that we should release all locks associated with a transaction after it has committed or
+ * aborted to ensure strict 2PL
+ * - However, it is possible for there to be other scenarios in which releasing a lock before a transaction
+ *  ends might be useful
+ * 
+ * Some actions (not all) that we need to verify are working properly
+ * 
+ * 1) Reading tuples off of pages during a SeqScan
+ * - If we implemented locking in BufferPool.getPage(), this should work correctly as long as
+ *   HeapFile.iterator() uses BufferPool.getPage()
+ * 
+ * 2) Inserting and deleting tuples through BufferPool and HeapFile methods
+ * - If we implemented locking in BufferPool.getPage(), this should work correctly as long as
+ *   HeapFile.insertTuple() and HeapFile.deleteTuple() use BufferPool.getPage()
+ * 
+ * Some situations to think about acquiring and releasing locks
+ * 
+ * 1) Add new page to HeapFile
+ * - When do we physically write the page to disk
+ * - Are there race conditions with other transactions or other threads that may need special attention
+ *   at the HeapFile level regardless of page-level locking?
+ * 
+ * 2) Looking for an empty slot into which we can insert tuples
+ * - Most implementations scan pages looking for an empty slot, and will need a READ_ONLY lock to do this
+ * - However, if a transaction t finds no free slot on a page p, t may immediately release the lock on p
+ *   because t did not use any data from the page
+ * 
+ * 
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
@@ -166,6 +213,11 @@ public class BufferPool {
          * on a specific object 
          * 
          * Modify getPage() to block and acquire the desired lock before returning a page
+         * 
+         * 
+         * Depending on implementation, may only need to acquire lock in BufferPool.getPage()
+         * -  Need to acquire a shared lock on any page (or tuple) before you read it
+         * -  Need to acquire an exclusive lock on any page (or tuple) before you write it
          */
 
         if (perm == Permissions.READ_ONLY) {
@@ -235,7 +287,7 @@ public class BufferPool {
          */
 
          // Help a transaction release a lock from a page
-        lockManager.releaseOneTransactionLock(tid, pid);
+        this.lockManager.releaseOneTransactionLock(tid, pid);
     }
 
 
@@ -260,7 +312,7 @@ public class BufferPool {
 
         // Lab3
         // Helps to determine whether a page is already locked by a transaction
-        return lockManager.holdsLock(tid, p);
+        return this.lockManager.holdsLock(tid, p);
     }
 
 
@@ -295,6 +347,13 @@ public class BufferPool {
      * their markDirty bit, and adds versions of any pages that have 
      * been dirtied to the cache (replacing any existing versions of those pages) so 
      * that future requests see up-to-date pages. 
+     * 
+     * 
+     * Lab 3
+     * Double check that BufferPool.insertTuple(), BufferPool.deleteTuple() call markDirty() 
+     * on any of the pages they access
+     * -> its called in the HeapFile insertTuple implementation. But just call again?
+     * 
      *
      * @param tid the transaction adding the tuple
      * @param tableId the table to add the tuple to
@@ -324,6 +383,9 @@ public class BufferPool {
             // Add the versions of these pages to the cache
             // i.e. (replacing any existing versions of those pages)
             // so that future requests see up-to-date pages
+
+            // Lab3 -> Double check that pages accessed are marked dirty
+            page.markDirty(true, tid);
 
             // If the page is already in the cache, remove it
             if (this.pageToFrame.containsKey(page.getId())) {
@@ -358,6 +420,10 @@ public class BufferPool {
      * their markDirty bit, and adds versions of any pages that have 
      * been dirtied to the cache (replacing any existing versions of those pages) so 
      * that future requests see up-to-date pages. 
+     * 
+     * 
+     * Double check that BufferPool.insertTuple(), BufferPool.deleteTuple() call markDirty() 
+     * on any of the pages they access
      *
      * @param tid the transaction deleting the tuple.
      * @param t the tuple to delete
@@ -387,6 +453,9 @@ public class BufferPool {
             // Add the versions of these pages to the cache
             // i.e. (replacing any existing versions of those pages)
             // so that future requests see up-to-date pages
+
+            // Lab3 -> Double check that pages accessed are marked dirty
+            page.markDirty(true, tid);
 
             // If the page is already in the cache, remove it
             if (this.pageToFrame.containsKey(page.getId())) {
