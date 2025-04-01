@@ -602,6 +602,6 @@ public class BufferPool {
         }
 
         // if we reach here, all pages are dirty
-        throw new DbException("All pages in the buffer pool are dirty. Cannot evict any page.");
+        throw new DbException("All pages are dirty, unable to evict any page.");
     }
 }
