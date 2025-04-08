@@ -143,7 +143,7 @@ public class BufferPool {
 
     private class Frame {
         private Page page;
-        private int timestamp; // The current pin count of the buffer pool
+        private int timestamp; // Timestamp at which the frame was inserted/updated.
 
         public Frame(Page page, int timestamp) {
             this.page = page;
@@ -245,6 +245,7 @@ public class BufferPool {
          * - Need to acquire an exclusive lock on any page (or tuple) before you write
          * it
          */
+        
 
         if (perm == Permissions.READ_ONLY) {
             this.lockManager.acquireSharedLock(tid, pid);
