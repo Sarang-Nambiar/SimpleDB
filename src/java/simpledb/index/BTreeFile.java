@@ -168,6 +168,13 @@ public class BTreeFile implements DbFile {
 		return keyField;
 	}
 
+
+
+
+
+
+
+
 	/**
 	 * Recursive function which finds and locks the leaf page in the B+ tree corresponding to
 	 * the left-most page possibly containing the key field f. It locks all internal
@@ -175,6 +182,43 @@ public class BTreeFile implements DbFile {
 	 * leaf node with permission perm.
 	 * 
 	 * If f is null, it finds the left-most leaf page -- used for the iterator
+	 * 
+	 * 
+	 * 
+	 * Lab 4 Exercise 1
+	 * 
+	 * 2 diff pages for nodes of tree: Internal Pages (BTreeInternalPage.java), Leaf Pages (BTreeLeafPage.java)
+	 * BTreePage.java is an abstract class that contains code common to both internal and leaf pages
+	 * Header Pages (BTreeHeaderPage.java) track which pages in the file are in use
+	 * Singleton Page (BTreeRootPtrPage.java) is implemented at the beginning of every BTreeFile and points to the root page of the tree and the first header page
+	 * BTreePage, BTreeInternalPage and BTreeLeafPage are important
+	 * 
+	 * findLeafPage() finds appropriate leaf page give a particular key value
+	 * If there are duplicate keys return the first (left) leaf page
+	 * Recursively search through internal nodes until it reaches the leaf page corresponding to the provided key value
+	 * - To find appropriate child page at each step, iterate through entires in internal page
+	 * - Compare the provided key value with the entry values
+	 * - BTreeInternalPage.Iterator() provides access to entries of an internal page. Allows you to iterate through the key values in the internal page
+	 * and access the left and right child page ids for each key
+	 * - Base case of recursion: Passed-in BTreePageId has pgcateg() equal to BTreePageId.LEAF, indicating that it is a leaf page
+	 * 	 - pgcateg() lets you check the type of the page -> Only internal and leaf pages will be passed
+	 *   - Fetch the page from the buffer pool and return it. Do not need to confirm it actually contains provided key value f
+	 *   
+	 * Must handle case when provided key value f is null
+	 * - If provided value is null, recurse on left-most child every time to find left-most leaf page
+	 * 	 - Useful for scanning entire file
+	 * 
+	 * Once correct leaf page is found, return it
+	 * 
+	 * Call wrapper function BTreeFile.getPage() to get each internal and leaf page
+	 * - Takes extra argument to track list of dirty pages
+	 * 
+	 * Every internal page visited shoud be fetched with READ_ONLY permission
+	 * Returned leaf page should be fetched with the permission provided as an argument
+	 * 
+	 * ant runtest -Dtest=BTreeFileReadTest
+	 * ant runsystest -Dtest=BTreeScanTest
+	 * 
 	 * 
 	 * @param tid - the transaction id
 	 * @param dirtypages - the list of dirty pages which should be updated with all new dirty pages
@@ -188,9 +232,72 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+        // return null;
+		
+		// Base Case
+		// Base Case of Recursion: Passed-in BTreePageId has pgcateg() equal to BTreePageId.LEAF, indicating that it is a leaf page
+		// Fetch the page from the buffer pool and return it. Do not need to confirm it actually contains provided key value f
+		// Use Wrapper function BTreeFile.getPage() to get each internal and leaf page
+		// Returned leaf page should be fetched with the permission provided as an argument
+		if(pid.pgcateg()==BTreePageId.LEAF) {
+			return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+		}
+
+		// Recursive Case
+		// Recusive Case: Internal Node
+		else if(pid.pgcateg()==BTreePageId.INTERNAL) {
+			// Fetch the internal node page 
+			// Every internal page visited shoud be fetched with READ_ONLY permission
+			BTreeInternalPage internal_page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+			// Iterate through entires in internal page. Compare the provided key value with the entry values
+			// BTreeInternalPage.Iterator() provides access to entries of an internal page. Allows you to iterate through the key values in the internal page 
+			// and access the left and right child page ids for each key
+			// BTreeEntry -> key, page id of left child, page id of right child
+			Iterator<BTreeEntry> internal_page_iterator = internal_page.iterator();
+
+			if (!internal_page_iterator.hasNext()) {
+				throw new DbException("No entries in internal page");
+			}
+
+			// If provided value is null, recurse on left-most child every time to find left-most leaf page
+			if (f==null && internal_page_iterator.hasNext()) {
+				return findLeafPage(tid, dirtypages, internal_page_iterator.next().getLeftChild(), perm, f);
+			}
+
+			// Iterate through entires in internal page. Compare the provided key value with the entry values
+			// BTreeInternalPage.Iterator() provides access to entries of an internal page. Allows you to iterate through the key values in the internal page 
+			// and access the left and right child page ids for each key
+			// BTreeEntry -> key, page id of left child, page id of right child
+			BTreeEntry curr_entry = null;
+			while(internal_page_iterator.hasNext()) {
+				curr_entry = internal_page_iterator.next();
+				// If the current key is greater than or equal than the provided key
+				// Comparison is done this way to ensure that our key is compared strictly
+				// - ex. if we compared if the current key is smaller than our key, we may go right down the tree too early
+				if(curr_entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)){
+					// Go left down the tree recursively
+					return findLeafPage(tid, dirtypages, curr_entry.getLeftChild(), perm, f);
+				}
+			}
+
+			// If we are here, it means that our key is greater than all the keys and we need to go right down the tree recursively
+			return findLeafPage(tid, dirtypages, curr_entry.getRightChild(), perm, f);
+		}
+
+		else {
+			throw new DbException("Invalid Page Type");
+		}
+		//return null;
 	}
 	
+
+
+
+
+
+
+
+
 	/**
 	 * Convenience method to find a leaf page when there is no dirtypages HashMap.
 	 * Used by the BTreeFile iterator.
