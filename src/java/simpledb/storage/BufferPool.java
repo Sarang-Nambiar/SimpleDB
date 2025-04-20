@@ -418,7 +418,7 @@ public class BufferPool {
         // — like indices — in the future)
 
         // Get the HeapFile
-        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(tableId);
+        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
         // Add a tuple to the specified table on behalf of transaction tid
         // Get the modified pages
         ArrayList<Page> modified_pages = (ArrayList<Page>) file.insertTuple(tid, t);
@@ -560,7 +560,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         Page page = this.pageToFrame.get(pid).get_Page();
-        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+        DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
         TransactionId tid = page.isDirty();
 
         // Checking if the page is not dirty

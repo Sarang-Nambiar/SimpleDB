@@ -346,8 +346,44 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
+        BTreeLeafPage rightPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		int mid = (int) (page.getNumTuples() / 2);
+		Iterator<Tuple> it = page.reverseIterator();
+		Field midKeyField = page.getTuple(mid).getField(keyField);
+
+		if(it == null) {
+			throw new DbException("Error: No tuples found.");
+		}
+
+		for(int i = 0; i < mid; i++) {
+			if(!it.hasNext()) {
+				throw new DbException("Error: No more tuples found.");
+			}
+			Tuple t = it.next();
+			page.deleteTuple(t);
+			rightPage.insertTuple(t);
+		}
+
+		// Setting the ids
+		if(page.getRightSiblingId() != null) {
+			BTreeLeafPage oldRightPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(), Permissions.READ_WRITE);
+			oldRightPage.setLeftSiblingId(rightPage.getId());
+		}
 		
+		rightPage.setRightSiblingId(page.getRightSiblingId());
+		page.setRightSiblingId(rightPage.getId());
+		rightPage.setLeftSiblingId(page.getId());
+		
+		// Setting the parent
+		BTreeInternalPage newParent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
+		newParent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId())); // Copying midKeyField to the parent
+		updateParentPointers(tid, dirtypages, newParent);
+		
+		// If the keyField passed is less than or equal to the mid field, then insert tuple to the left leaf page
+		if(midKeyField.compare(Op.GREATER_THAN, field)) {
+			return page;
+		}
+		return rightPage;
 	}
 	
 	/**
@@ -384,7 +420,42 @@ public class BTreeFile implements DbFile {
 		// the parent pointers of all the children moving to the new page.  updateParentPointers()
 		// will be useful here.  Return the page into which an entry with the given key field
 		// should be inserted.
-		return null;
+		BTreeInternalPage rightPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		Iterator<BTreeEntry> it = page.reverseIterator();
+		int numEntries = page.getNumEntries();
+		int mid = (int) numEntries / 2;
+		
+
+		if(it == null) {
+			throw new DbException("Error: No entries found.");
+		}
+		
+		for(int i = 0; i < mid; i++) {
+			if(!it.hasNext()) {
+				throw new DbException("Error: No more entries found.");
+			}
+			BTreeEntry entry = it.next();
+			page.deleteKeyAndRightChild(entry);
+			rightPage.insertEntry(entry);
+		}
+		
+		if(!it.hasNext()) {
+			throw new DbException("Error: No more entries found.");
+		}
+
+		BTreeEntry midEntry = it.next();
+		Field midKeyField = midEntry.getKey();
+		page.deleteKeyAndRightChild(midEntry);
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
+		parent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId()));
+
+		updateParentPointers(tid, dirtypages, parent);
+		updateParentPointers(tid, dirtypages, rightPage);
+
+		if(midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
+			return page;
+		}
+		return rightPage;
 	}
 	
 	/**
