@@ -380,7 +380,7 @@ public class BTreeFile implements DbFile {
 		updateParentPointers(tid, dirtypages, newParent);
 		
 		// If the keyField passed is less than or equal to the mid field, then insert tuple to the left leaf page
-		if(midKeyField.compare(Op.GREATER_THAN, field)) {
+		if(midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
 			return page;
 		}
 		return rightPage;
