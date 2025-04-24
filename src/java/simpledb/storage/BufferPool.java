@@ -245,7 +245,6 @@ public class BufferPool {
          * - Need to acquire an exclusive lock on any page (or tuple) before you write
          * it
          */
-        
 
         if (perm == Permissions.READ_ONLY) {
             this.lockManager.acquireSharedLock(tid, pid);
@@ -483,8 +482,11 @@ public class BufferPool {
         // (this extra level of indirection is needed to support other types of files
         // — like indices — in the future)
 
-        // Get the HeapFile
-        HeapFile file = (HeapFile) Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        // // Get the HeapFile
+        // HeapFile file = (HeapFile)
+        // Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        DbFile file = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+
         // Delete a tuple from the specified table on behalf of transaction tid
         // Get the modified pages
         ArrayList<Page> modified_pages = (ArrayList<Page>) file.deleteTuple(tid, t);
