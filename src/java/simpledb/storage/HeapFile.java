@@ -36,6 +36,18 @@ import java.util.*;
  * RecordId is a reference to a specific tuple on a specific page of a specific table.
  * Tuple stores the tuple information, TupleDesc defines the schema
  * 
+ * 
+ * 
+ * Lab3
+ * 
+ * Implementation of HeapFile.insertTuple() and HeapFile.deleteTuple(), as well as the implementation 
+ * of the iterator returned by HeapFile.iterator() should access pages using BufferPool.getPage()
+ * 
+ * Double check that these different uses of getPage() pass the correct permissions object
+ * - Permissions.READ_WRITE, Permissions.READ_ONLY
+ * 
+ * 
+ * 
  * @see HeapPage#HeapPage
  * @author Sam Madden
  */
@@ -201,33 +213,59 @@ public class HeapFile implements DbFile {
         // access pages using the BufferPool.getPage() method
 
         // Check if any pages in this HeapFile have an empty slot
+        // Concurrency is protected by getPage permissions
         for(int i=0; i<this.numPages(); i++) {
             // Get a page
             HeapPageId pageId = new HeapPageId(this.getId(), i);
-            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, null);
+            // Lab 3
+            // Most implementations scan pages looking for an empty slot, and will need a READ_ONLY lock to do this
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
 
             // Check for empty slots in this page
             // If there are empty slots, insert the tuple in this page
             if(page.getNumEmptySlots()>0) {
+
+                // Lab 3
+                // Upgrade permission to READ_WRITE
+                page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
+
                 page.insertTuple(t);
                 page.markDirty(true, tid);
                 modified_pages.add(page);
                 return modified_pages;
             }
+
+            // Lab 3 
+            // Optimization: if a transaction t finds no free slot on a page p, t may immediately release the lock on p
+            // because t did not use any data from the page
+            // we can release page lock early since we did not actually look at the page's data
+            Database.getBufferPool().unsafeReleasePage(tid, pageId);
         }
+
+
 
         // There are no pages in this HeapFile with any empty slots so we need to write a new page
         // and insert the tuple into that page
         // Because its 0-th index, the new index should be numPages()
-        HeapPageId newPageId = new HeapPageId(this.getId(), this.numPages());
-        HeapPage newPage = new HeapPage(newPageId, HeapPage.createEmptyPageData());
-        newPage.insertTuple(t);
-        newPage.markDirty(true, tid);
-        modified_pages.add(newPage);
-        this.writePage(newPage);
 
-        // Return the page that has been modified
-        return modified_pages;
+        // Lab 3
+        // From the instructions: When do we physically write the page to disk
+        // Are there race conditions with other transactions or other threads that may need special attention
+        // at the HeapFile level regardless of page-level locking?
+        // Use Database.getCatalog() as the global lock (singleton) instead of 'this' as 'this' may be created multiple times
+        // and won't be global
+        synchronized(Database.getCatalog()){
+            HeapPageId newPageId = new HeapPageId(this.getId(), this.numPages());
+            HeapPage newPage = new HeapPage(newPageId, HeapPage.createEmptyPageData());
+            newPage.insertTuple(t);
+            newPage.markDirty(true, tid);
+            modified_pages.add(newPage);
+            this.writePage(newPage);
+
+            // Return the page that has been modified
+            return modified_pages;
+        }
+        
     }
 
 
@@ -251,7 +289,7 @@ public class HeapFile implements DbFile {
         // Get the page that the tuple resides on
         // Delete the tuple from the page
         PageId pageId = t.getRecordId().getPageId();
-        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, null);
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
         page.deleteTuple(t);
         page.markDirty(true, tid);
         modified_pages.add(page);
@@ -330,7 +368,7 @@ public class HeapFile implements DbFile {
             // In the getPage method, there is a readPage method that is called on the HeapFile
             // dbFile (HeapFile) readPage -> returns a HeapFile
             // HeapPage stores header and tuple data for one page of HeapFiles
-            this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, null);
+            this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, Permissions.READ_ONLY);
             // Return an iterator that stores tuples: ArrayList<Tuple>
             this.heapPageIterator = this.heapPage.iterator();
             this.isOpen = true;
@@ -366,7 +404,7 @@ public class HeapFile implements DbFile {
                     // Identifies the file/table it belongs to and what page number
                     HeapPageId heapPageId = new HeapPageId(this.tableId, this.heapPage.getId().getPageNumber() + 1);
                     // Set this as the new heap page
-                    this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, null);
+                    this.heapPage = (HeapPage) Database.getBufferPool().getPage(this.transactionId, heapPageId, Permissions.READ_ONLY);
                     // Return an iterator that stores tuples: ArrayList<Tuple>
                     this.heapPageIterator = this.heapPage.iterator();
                     // If the next page has data, return true

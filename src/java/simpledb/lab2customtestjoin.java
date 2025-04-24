@@ -2,13 +2,12 @@ package simpledb;
 
 import java.io.*;
 
-// ADD THESE
 import simpledb.common.*;
 import simpledb.storage.*;
 import simpledb.execution.*;
 import simpledb.transaction.*;
 
-public class jointest {
+public class lab2customtestjoin {
 
     public static void main(String[] argv) {
         // construct a 3-column table schema
