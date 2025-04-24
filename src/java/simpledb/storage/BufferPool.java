@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -246,48 +247,29 @@ public class BufferPool {
          * it
          */
 
-        if (perm == Permissions.READ_ONLY) {
+         if (perm == Permissions.READ_ONLY) {
             this.lockManager.acquireSharedLock(tid, pid);
         } else if (perm == Permissions.READ_WRITE) {
             this.lockManager.acquireExclusiveLock(tid, pid);
         }
 
-        // Still necessary to have a simple intrinsic mutex lock to prevent race
-        // conditions for shared/read lock as there's modification
         synchronized (this) {
-            // The retrieved page should be looked up in the buffer pool. If it is present,
-            // it should be returned
             if (this.pageToFrame.containsKey(pid)) {
                 this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
                 return this.pageToFrame.get(pid).get_Page();
-                // If it is not present, it should be added to the buffer pool and returned.
             } else {
-                // If there is insufficient space in the buffer pool
-                // For this lab, if more than `numPages` requests are made for different pages,
-                // then
-                // instead of implementing an eviction policy, you may throw a DbException.
                 if (this.pageToFrame.size() >= this.numPages) {
                     this.evictPage();
                 }
-                // See PageId.java. Return the unique tableid hashcode of this PageId
-                int tableId = pid.getTableId();
-                // See Catalog.java. Get the Database file using the table id
-                // Returns the DbFile that can be used to read the contents of the specified
-                // table.
-                DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
-                // See DbFile.java. Read the Page from the Database file.
-                // Read the specified page from disk.
-                // Hint for lab1: You should use the DbFile.readPage method to access pages of a
-                // DbFile.
+                DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
                 Page page = dbFile.readPage(pid);
-                // Add to the buffer pool
                 Frame newEntry = new Frame(page, this.currTimeStamp++);
                 this.pageToFrame.put(pid, newEntry);
                 this.minHeap.add(newEntry);
                 return page;
             }
         }
-        // return null;
+    
     }
 
     /**
@@ -350,32 +332,30 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         synchronized (this) {
-            ArrayList<PageId> toRemove = new ArrayList<>();
-
-            for (PageId pid : pageToFrame.keySet()) {
-                Page page = pageToFrame.get(pid).get_Page();
-                TransactionId dirtyTid = page.isDirty();
-
-                if (tid.equals(dirtyTid)) {
-                    if (commit) {
-                        try {
-                            flushPage(pid);
-                        } catch (IOException e) {
-                            e.printStackTrace();
+            try {
+                if (commit) {
+                    flushPages(tid);
+                } else {
+                    // Revert changes by reloading original page from disk
+                    for (PageId pid : new ArrayList<>(pageToFrame.keySet())) {
+                        Page page = pageToFrame.get(pid).get_Page();
+                        if (tid.equals(page.isDirty())) {
+                            discardPage(pid);
+                            Page fresh = Database.getCatalog()
+                                    .getDatabaseFile(pid.getTableId())
+                                    .readPage(pid);
+                            Frame refreshed = new Frame(fresh, currTimeStamp++);
+                            pageToFrame.put(pid, refreshed);
+                            minHeap.add(refreshed);
                         }
-                    } else {
-                        discardPage(pid);
-                        DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                        Page cleanPage = dbFile.readPage(pid);
-                        Frame refreshed = new Frame(cleanPage, currTimeStamp++);
-                        pageToFrame.put(pid, refreshed);
-                        minHeap.add(refreshed);
                     }
-                    page.markDirty(false, tid);
                 }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
-
+    
+        // Always release locks
         lockManager.releaseAllTransactionLocks(tid);
 
     }
@@ -530,9 +510,16 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         Iterator<ConcurrentHashMap.Entry<PageId, Frame>> i = this.pageToFrame.entrySet().iterator();
+        int flushedCount = 0;
+        int maxBatchSize = 100; // Flush in batches of 100 pages to reduce memory overhead
 
-        while (i.hasNext()) {
+        while (i.hasNext() && flushedCount < maxBatchSize) {
             this.flushPage(i.next().getKey());
+            flushedCount++;
+        }
+
+        if (flushedCount == maxBatchSize) {
+            System.out.println("Flushed " + maxBatchSize + " pages to disk.");
         }
 
     }
@@ -581,6 +568,13 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (Map.Entry<PageId, Frame> entry : pageToFrame.entrySet()) {
+            Page page = entry.getValue().get_Page();
+            // Ensure that dirty pages are flushed for the given transaction
+            if (tid.equals(page.isDirty())) {
+                flushPage(page.getId());
+            }
+        }
     }
 
     /**
@@ -594,17 +588,32 @@ public class BufferPool {
         while (iterator.hasNext()) {
             Frame candidate = iterator.next();
             Page page = candidate.get_Page();
-
+            // Evict clean pages
             if (page.isDirty() == null) {
                 PageId pid = page.getId();
-
-                iterator.remove(); // remove from heap
-                pageToFrame.remove(pid); // remove from map
+                iterator.remove();
+                pageToFrame.remove(pid);
                 return;
             }
         }
-
-        // if we reach here, all pages are dirty
-        throw new DbException("All pages are dirty, unable to evict any page.");
+        
+        // If all pages are dirty, force eviction (flush dirty pages to disk)
+        Iterator<Frame> forceEvictIterator = minHeap.iterator();
+        while (forceEvictIterator.hasNext()) {
+            Frame candidate = forceEvictIterator.next();
+            Page page = candidate.get_Page();
+            PageId pid = page.getId();
+            try {
+                // Forcefully flush the dirty page to disk
+                flushPage(pid);
+                forceEvictIterator.remove();
+                pageToFrame.remove(pid);
+                return;
+            } catch (IOException e) {
+                throw new DbException("Error while flushing page to disk during eviction: " + e.getMessage());
+            }
+        }
+        // If we reached here, it means there are no clean pages to evict
+        throw new DbException("All pages are dirty; unable to evict under NO STEAL.");
     }
 }

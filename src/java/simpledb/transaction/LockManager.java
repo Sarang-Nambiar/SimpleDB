@@ -86,60 +86,63 @@ public class LockManager {
     // Apply deadlock detection here with the use of tid to pages and the other hashmap. 
     public void acquireSharedLock(TransactionId tid, PageId pid) 
         throws TransactionAbortedException {
-        PageLock pageLock;
-        synchronized (this) {
-            // Get or create the page lock (if it does not exist) on this page
-            pageLock = getPageLock(pid);
-            // Check if there is a potential deadlock
-            if(pageLock.SLheldBy(tid) || pageLock.ELheldBy(tid)) return;
-            if(!pageLock.getELholder().isEmpty()) {
-                this.graph.put(tid, pageLock.getELholder());
-                if(this.hasCycles(tid)) {
-                    this.graph.remove(tid);
-                    throw new TransactionAbortedException();
+            PageLock pageLock;
+            synchronized (this) {
+                pageLock = getPageLock(pid);
+        
+                if (pageLock.SLheldBy(tid) || pageLock.ELheldBy(tid)) return;
+        
+                Set<TransactionId> blockers = pageLock.getELholder();
+                blockers.remove(tid); // avoid self-dependency
+                if (!blockers.isEmpty()) {
+                    this.graph.put(tid, blockers);
+                    if (hasCycles(tid)) {
+                        this.graph.remove(tid);
+                        System.out.println("[DEADLOCK] Shared lock deadlock involving " + tid);
+                        throw new TransactionAbortedException();
+                    }
                 }
             }
-
-        }
-        // Acquire a shared lock on the page by passing the transactionId
-        pageLock.acquireSharedLock(tid);
-        synchronized(this) {
-            // Remove from dependency graph after the lock is acquired
-            this.graph.remove(tid);
-            // Once the lock is acquired, update the transactionId to pages mapping
-            getTransactionPages(tid).add(pid);
-        }
+        
+            pageLock.acquireSharedLock(tid);
+            synchronized (this) {
+                this.graph.remove(tid);
+                getTransactionPages(tid).add(pid);
+            }
+        
+            System.out.println("[LOCK] " + tid + " got SHARED lock on " + pid);
     }
 
     // Acquire an exclusive (write) lock on a page
     public void acquireExclusiveLock(TransactionId tid, PageId pid) 
         throws TransactionAbortedException{
-        PageLock pageLock;
-        synchronized(this) {
-            // Get or create the page lock (if it does not exist) on this page
-            pageLock = getPageLock(pid);
-            // Checking for potential deadlocks
-            if(pageLock.ELheldBy(tid)) return;
-            if(!pageLock.getSLholders().isEmpty() || !pageLock.getELholder().isEmpty()) {
-                Set<TransactionId> allHolders = new HashSet<>();
-                allHolders.addAll(pageLock.getSLholders());
+            PageLock pageLock;
+            synchronized (this) {
+                pageLock = getPageLock(pid);
+        
+                if (pageLock.ELheldBy(tid)) return;
+        
+                Set<TransactionId> allHolders = new HashSet<>(pageLock.getSLholders());
                 allHolders.addAll(pageLock.getELholder());
-                this.graph.put(tid, allHolders);
-                if(this.hasCycles(tid)){
-                    this.graph.remove(tid);
-                    throw new TransactionAbortedException();
+                allHolders.remove(tid); // avoid self-dependency
+        
+                if (!allHolders.isEmpty()) {
+                    this.graph.put(tid, allHolders);
+                    if (hasCycles(tid)) {
+                        this.graph.remove(tid);
+                        System.out.println("[DEADLOCK] Exclusive lock deadlock involving " + tid);
+                        throw new TransactionAbortedException();
+                    }
                 }
             }
-
-        }
-        // Acquire a exclusive lock on the page by passing the transactionId
-        pageLock.acquireExclusiveLock(tid);
-        synchronized(this) {
-            // Remove from dependency graph after the lock is acquired
-            this.graph.remove(tid); 
-            // Once the lock is acquired, update the transactionId to page mapping
-            getTransactionPages(tid).add(pid);
-        }
+        
+            pageLock.acquireExclusiveLock(tid);
+            synchronized (this) {
+                this.graph.remove(tid);
+                getTransactionPages(tid).add(pid);
+            }
+        
+            System.out.println("[LOCK] " + tid + " got EXCLUSIVE lock on " + pid);
     }
 
 
@@ -190,8 +193,13 @@ public class LockManager {
     private boolean hasCycles(TransactionId tid) {
         Set<TransactionId> visited = new HashSet<>();
         Set<TransactionId> visiting = new HashSet<>();
-        return this.dfs(tid, visiting, visited);
+        boolean result = this.dfs(tid, visiting, visited);
+        if (result) {
+            System.out.println("[DEADLOCK DETECTED] Cycle found starting from: " + tid);
+        }
+        return result;
     }
+    
 
     private boolean dfs(TransactionId curr, Set<TransactionId> visiting, Set<TransactionId> visited) {
         // Sanity check

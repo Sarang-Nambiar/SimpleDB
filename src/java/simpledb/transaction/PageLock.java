@@ -40,24 +40,22 @@ public class PageLock {
         // "A single transaction should be able to acquire a read lock after it already has a write lock"
         if(SLholders.contains(tid) || SLacquirers.contains(tid) || ELholder.contains(tid) || ELacquirers.contains(tid)) return;
 
-        // Critical Section because it contains modification
         synchronized (this) {
-            // Add the transaction as an acquirer for potential deadlock detection
             SLacquirers.add(tid);
             try {
-                // Wait until there is no transaction holding an EL
-                while(ELholder.size()>0) {
-                    // Enter waiting state until a notifyAll is called on the same object (this -> current instance of the PageLock class)
-                    // such that it wakes up and rechecks the condition
-                    this.wait();
-                } 
-                // Once there is no transaction holding the EL
-                // Add the transaction to the set of transactions holding a SL on this page
+                // Wait if there is an exclusive lock holder
+                while (!ELholder.isEmpty()) {
+                    System.out.println("[WAITING] " + tid + " waiting for SHARED lock on " + pageId + " | ELholder=" + ELholder);
+                    this.wait(1000);  // wait with timeout
+                    if (!ELholder.isEmpty()) {
+                        throw new RuntimeException("[TIMEOUT] Waiting too long for SHARED lock on " + pageId + " by " + tid);
+                    }
+                }
                 SLholders.add(tid);
+                System.out.println("[LOCK] " + tid + " got SHARED lock on " + pageId);
             } catch (Exception e) {
-                e.printStackTrace();
+                throw new RuntimeException("[ERROR] Shared lock failed for " + tid + ": " + e.getMessage());
             }
-            // Remove the transaction from SL acquirers
             SLacquirers.remove(tid);
         }
     }
@@ -75,40 +73,35 @@ public class PageLock {
         // Allow transaction to hold SL because of the possibility to upgrade to EL
         if(ELholder.contains(tid) || ELacquirers.contains(tid)) return;
 
-        // Critical Section because it contains modification
         synchronized (this) {
-            // Add the transaction as an acquirer for potential deadlock detection
             ELacquirers.add(tid);
             try {
-                // In the case of a lock upgrade where a transaction needs to acquire a SL first
-                if(SLholders.contains(tid)){
-                    // While other transactions are holding on to the read lock 
-                    // wait
-                    // Enter waiting state until a notifyAll is called on the same object (this -> current instance of the PageLock class)
-                    // such that it wakes up and rechecks the condition
-                    while(SLholders.size()>1){
-                        this.wait();
+                // Upgrade from shared lock
+                if (SLholders.contains(tid)) {
+                    while (SLholders.size() > 1) {
+                        System.out.println("[WAITING-UPGRADE] " + tid + " waiting to upgrade to EXCLUSIVE lock on " + pageId);
+                        this.wait(5000);
+                        if (SLholders.size() > 1) {
+                            throw new RuntimeException("[TIMEOUT] Lock upgrade waiting too long on " + pageId + " by " + tid);
+                        }
                     }
-                    // Now, only this transaction is holding the shared lock
-                    // Release it so it can be upgraded to an exclusive lock
                     SLholders.remove(tid);
                 }
 
-                // Wait until there is no transaction holding ANY lock
-                // Still needed even if there is a lock upgrade previously to check for EL holders
-                while(SLholders.size() > 0 || ELholder.size()>0) {
-                    // Enter waiting state until a notifyAll is called on the same object (this -> current instance of the PageLock class)
-                    // such that it wakes up and rechecks the condition
-                    this.wait();
-                } 
+                // Wait until no one else holds a shared or exclusive lock
+                while (!SLholders.isEmpty() || !ELholder.isEmpty()) {
+                    System.out.println("[WAITING] " + tid + " waiting for EXCLUSIVE lock on " + pageId + " | SLholders=" + SLholders + " | ELholder=" + ELholder);
+                    this.wait(5000);
+                    if (!SLholders.isEmpty() || !ELholder.isEmpty()) {
+                        throw new RuntimeException("[TIMEOUT] Waiting too long for EXCLUSIVE lock on " + pageId + " by " + tid);
+                    }
+                }
 
-                // Once there is no transaction holding ANY lock
-                // Set the transaction to the only transaction holding an EL on this page
                 ELholder.add(tid);
+                System.out.println("[LOCK] " + tid + " got EXCLUSIVE lock on " + pageId);
             } catch (Exception e) {
-                e.printStackTrace();
+                throw new RuntimeException("[ERROR] Exclusive lock failed for " + tid + ": " + e.getMessage());
             }
-            // Remove the transaction from EL acquirers
             ELacquirers.remove(tid);
         }
     }
@@ -121,9 +114,9 @@ public class PageLock {
                 SLholders.remove(tid);
                 // Wake up all waiting threads on 'this'
                 this.notifyAll();
+                System.out.println("[UNLOCK] " + tid + " released SHARED lock on " + pageId);
                 return;
             }
-            return;
         }
     }
 
@@ -134,9 +127,9 @@ public class PageLock {
                 ELholder.remove(tid);
                 // Wake up all waiting threads on 'this'
                 this.notifyAll();
+                System.out.println("[UNLOCK] " + tid + " released EXCLUSIVE lock on " + pageId);
                 return;
             }
-            return;
         }
     }
 
