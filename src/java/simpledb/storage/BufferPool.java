@@ -247,18 +247,21 @@ public class BufferPool {
          * it
          */
 
-         if (perm == Permissions.READ_ONLY) {
+         //System.out.printf("[REQUEST] %s requests %s lock on %s\n", tid, perm, pid);
+        if (perm == Permissions.READ_ONLY) {
             this.lockManager.acquireSharedLock(tid, pid);
-        } else if (perm == Permissions.READ_WRITE) {
+        } else {
             this.lockManager.acquireExclusiveLock(tid, pid);
         }
 
         synchronized (this) {
             if (this.pageToFrame.containsKey(pid)) {
+                //System.out.printf("[CACHE-HIT] %s got %s from cache\n", tid, pid);
                 this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
                 return this.pageToFrame.get(pid).get_Page();
             } else {
                 if (this.pageToFrame.size() >= this.numPages) {
+                    //System.out.println("[EVICT] Cache full — evicting a page...");
                     this.evictPage();
                 }
                 DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
@@ -266,6 +269,7 @@ public class BufferPool {
                 Frame newEntry = new Frame(page, this.currTimeStamp++);
                 this.pageToFrame.put(pid, newEntry);
                 this.minHeap.add(newEntry);
+                //System.out.printf("[DISK-LOAD] %s loaded %s from disk\n", tid, pid);
                 return page;
             }
         }
@@ -338,12 +342,17 @@ public class BufferPool {
                 } else {
                     // Revert changes by reloading original page from disk
                     for (PageId pid : new ArrayList<>(pageToFrame.keySet())) {
-                        Page page = pageToFrame.get(pid).get_Page();
+                        Frame frame = pageToFrame.get(pid);
+                        if (frame == null) continue; 
+                    
+                        Page page = frame.get_Page();
                         if (tid.equals(page.isDirty())) {
                             discardPage(pid);
+                    
                             Page fresh = Database.getCatalog()
                                     .getDatabaseFile(pid.getTableId())
                                     .readPage(pid);
+                    
                             Frame refreshed = new Frame(fresh, currTimeStamp++);
                             pageToFrame.put(pid, refreshed);
                             minHeap.add(refreshed);
@@ -414,9 +423,10 @@ public class BufferPool {
 
             // If the page is already in the cache, remove it
             if (this.pageToFrame.containsKey(page.getId())) {
-                Frame frame = this.pageToFrame.get(page.getId());
-                this.pageToFrame.remove(page.getId());
-                this.minHeap.remove(frame);
+                Frame frame = this.pageToFrame.remove(page.getId());
+                if (frame != null) {
+                    this.minHeap.remove(frame);
+                }
             }
 
             // If there is no space in the cache/BufferPool, run the eviction policy
@@ -483,9 +493,10 @@ public class BufferPool {
 
             // If the page is already in the cache, remove it
             if (this.pageToFrame.containsKey(page.getId())) {
-                Frame frame = this.pageToFrame.get(page.getId());
-                this.pageToFrame.remove(page.getId());
-                this.minHeap.remove(frame);
+                Frame frame = this.pageToFrame.remove(page.getId());
+                if (frame != null) {
+                    this.minHeap.remove(frame);
+                }
             }
 
             // If there is no space in the cache/BufferPool, run the eviction policy
@@ -519,7 +530,7 @@ public class BufferPool {
         }
 
         if (flushedCount == maxBatchSize) {
-            System.out.println("Flushed " + maxBatchSize + " pages to disk.");
+            //System.out.println("Flushed " + maxBatchSize + " pages to disk.");
         }
 
     }
@@ -584,36 +595,19 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
-        Iterator<Frame> iterator = minHeap.iterator();
+        Iterator<Map.Entry<PageId, Frame>> iterator = pageToFrame.entrySet().iterator();
         while (iterator.hasNext()) {
-            Frame candidate = iterator.next();
-            Page page = candidate.get_Page();
-            // Evict clean pages
+            Map.Entry<PageId, Frame> entry = iterator.next();
+            Page page = entry.getValue().get_Page();
             if (page.isDirty() == null) {
-                PageId pid = page.getId();
-                iterator.remove();
-                pageToFrame.remove(pid);
+                // Remove from heap and map
+                minHeap.remove(entry.getValue());
+                iterator.remove();  // remove from pageToFrame
                 return;
             }
         }
-        
-        // If all pages are dirty, force eviction (flush dirty pages to disk)
-        Iterator<Frame> forceEvictIterator = minHeap.iterator();
-        while (forceEvictIterator.hasNext()) {
-            Frame candidate = forceEvictIterator.next();
-            Page page = candidate.get_Page();
-            PageId pid = page.getId();
-            try {
-                // Forcefully flush the dirty page to disk
-                flushPage(pid);
-                forceEvictIterator.remove();
-                pageToFrame.remove(pid);
-                return;
-            } catch (IOException e) {
-                throw new DbException("Error while flushing page to disk during eviction: " + e.getMessage());
-            }
-        }
-        // If we reached here, it means there are no clean pages to evict
-        throw new DbException("All pages are dirty; unable to evict under NO STEAL.");
+
+        // If no clean page is found, we can't evict under NO-STEAL policy
+        throw new DbException("All pages are dirty; eviction not allowed (NO-STEAL).");
     }
 }
