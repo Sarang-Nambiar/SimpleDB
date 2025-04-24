@@ -247,70 +247,94 @@ public class BTreeFile implements DbFile {
 		// some code goes here
 		// return null;
 
-		// Base Case
-		// Base Case of Recursion: Passed-in BTreePageId has pgcateg() equal to
-		// BTreePageId.LEAF, indicating that it is a leaf page
-		// Fetch the page from the buffer pool and return it. Do not need to confirm it
-		// actually contains provided key value f
-		// Use Wrapper function BTreeFile.getPage() to get each internal and leaf page
-		// Returned leaf page should be fetched with the permission provided as an
-		// argument
-		if (pid.pgcateg() == BTreePageId.LEAF) {
-			return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
-		}
+		// // Base Case
+		// // Base Case of Recursion: Passed-in BTreePageId has pgcateg() equal to
+		// // BTreePageId.LEAF, indicating that it is a leaf page
+		// // Fetch the page from the buffer pool and return it. Do not need to confirm it
+		// // actually contains provided key value f
+		// // Use Wrapper function BTreeFile.getPage() to get each internal and leaf page
+		// // Returned leaf page should be fetched with the permission provided as an
+		// // argument
+		// if (pid.pgcateg() == BTreePageId.LEAF) {
+		// 	return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+		// }
 
-		// Recursive Case
-		// Recusive Case: Internal Node
-		else if (pid.pgcateg() == BTreePageId.INTERNAL) {
-			// Fetch the internal node page
-			// Every internal page visited shoud be fetched with READ_ONLY permission
-			BTreeInternalPage internal_page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
-			// Iterate through entires in internal page. Compare the provided key value with
-			// the entry values
-			// BTreeInternalPage.Iterator() provides access to entries of an internal page.
-			// Allows you to iterate through the key values in the internal page
-			// and access the left and right child page ids for each key
-			// BTreeEntry -> key, page id of left child, page id of right child
-			Iterator<BTreeEntry> internal_page_iterator = internal_page.iterator();
+		// // Recursive Case
+		// // Recusive Case: Internal Node
+		// else if (pid.pgcateg() == BTreePageId.INTERNAL) {
+		// 	// Fetch the internal node page
+		// 	// Every internal page visited shoud be fetched with READ_ONLY permission
+		// 	BTreeInternalPage internal_page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+		// 	// Iterate through entires in internal page. Compare the provided key value with
+		// 	// the entry values
+		// 	// BTreeInternalPage.Iterator() provides access to entries of an internal page.
+		// 	// Allows you to iterate through the key values in the internal page
+		// 	// and access the left and right child page ids for each key
+		// 	// BTreeEntry -> key, page id of left child, page id of right child
+		// 	Iterator<BTreeEntry> internal_page_iterator = internal_page.iterator();
 
-			if (!internal_page_iterator.hasNext()) {
-				throw new DbException("No entries in internal page");
-			}
+		// 	if (!internal_page_iterator.hasNext()) {
+		// 		throw new DbException("No entries in internal page");
+		// 	}
 
-			// If provided value is null, recurse on left-most child every time to find
-			// left-most leaf page
-			if (f == null && internal_page_iterator.hasNext()) {
-				return findLeafPage(tid, dirtypages, internal_page_iterator.next().getLeftChild(), perm, f);
-			}
+		// 	// If provided value is null, recurse on left-most child every time to find
+		// 	// left-most leaf page
+		// 	if (f == null && internal_page_iterator.hasNext()) {
+		// 		return findLeafPage(tid, dirtypages, internal_page_iterator.next().getLeftChild(), perm, f);
+		// 	}
 
-			// Iterate through entires in internal page. Compare the provided key value with
-			// the entry values
-			// BTreeInternalPage.Iterator() provides access to entries of an internal page.
-			// Allows you to iterate through the key values in the internal page
-			// and access the left and right child page ids for each key
-			// BTreeEntry -> key, page id of left child, page id of right child
-			BTreeEntry curr_entry = null;
-			while (internal_page_iterator.hasNext()) {
-				curr_entry = internal_page_iterator.next();
-				// If the current key is greater than or equal than the provided key
-				// Comparison is done this way to ensure that our key is compared strictly
-				// - ex. if we compared if the current key is smaller than our key, we may go
-				// right down the tree too early
-				if (curr_entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
-					// Go left down the tree recursively
-					return findLeafPage(tid, dirtypages, curr_entry.getLeftChild(), perm, f);
+		// 	// Iterate through entires in internal page. Compare the provided key value with
+		// 	// the entry values
+		// 	// BTreeInternalPage.Iterator() provides access to entries of an internal page.
+		// 	// Allows you to iterate through the key values in the internal page
+		// 	// and access the left and right child page ids for each key
+		// 	// BTreeEntry -> key, page id of left child, page id of right child
+		// 	BTreeEntry curr_entry = null;
+		// 	while (internal_page_iterator.hasNext()) {
+		// 		curr_entry = internal_page_iterator.next();
+		// 		// If the current key is greater than or equal than the provided key
+		// 		// Comparison is done this way to ensure that our key is compared strictly
+		// 		// - ex. if we compared if the current key is smaller than our key, we may go
+		// 		// right down the tree too early
+		// 		if (curr_entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
+		// 			// Go left down the tree recursively
+		// 			return findLeafPage(tid, dirtypages, curr_entry.getLeftChild(), perm, f);
+		// 		}
+		// 	}
+
+		// 	// If we are here, it means that our key is greater than all the keys and we
+		// 	// need to go right down the tree recursively
+		// 	return findLeafPage(tid, dirtypages, curr_entry.getRightChild(), perm, f);
+		// }
+
+		// else {
+		// 	throw new DbException("Invalid Page Type");
+		// }
+		// // return null;
+		switch (pid.pgcateg()) {
+			case BTreePageId.LEAF:
+				return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+			case BTreePageId.INTERNAL:
+				BTreeInternalPage page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+				Iterator<BTreeEntry> iterator = page.iterator();
+	
+				if (f == null && iterator.hasNext()) {
+					return findLeafPage(tid, dirtypages, iterator.next().getLeftChild(), perm, null);
 				}
-			}
-
-			// If we are here, it means that our key is greater than all the keys and we
-			// need to go right down the tree recursively
-			return findLeafPage(tid, dirtypages, curr_entry.getRightChild(), perm, f);
+	
+				while (iterator.hasNext()) {
+					BTreeEntry entry = iterator.next();
+					if (entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
+						return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, f);
+					}
+				}
+	
+				return findLeafPage(tid, dirtypages, page.reverseIterator().next().getRightChild(), perm, f);
+	
+			default:
+				throw new DbException("Invalid page category");
 		}
 
-		else {
-			throw new DbException("Invalid Page Type");
-		}
-		// return null;
 	}
 
 	/**
@@ -372,46 +396,75 @@ public class BTreeFile implements DbFile {
 		// the sibling pointers of all the affected leaf pages. Return the page into
 		// which a
 		// tuple with the given key field should be inserted.
-		BTreeLeafPage rightPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
-		int mid = (int) (page.getNumTuples() / 2);
+
+		// BTreeLeafPage rightPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		// int mid = (int) (page.getNumTuples() / 2);
+		// Iterator<Tuple> it = page.reverseIterator();
+		// Field midKeyField = page.getTuple(mid).getField(keyField);
+
+		// if (it == null) {
+		// 	throw new DbException("Error: No tuples found.");
+		// }
+
+		// for (int i = 0; i < mid; i++) {
+		// 	if (!it.hasNext()) {
+		// 		throw new DbException("Error: No more tuples found.");
+		// 	}
+		// 	Tuple t = it.next();
+		// 	page.deleteTuple(t);
+		// 	rightPage.insertTuple(t);
+		// }
+
+		// // Setting the ids
+		// if (page.getRightSiblingId() != null) {
+		// 	BTreeLeafPage oldRightPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(),
+		// 			Permissions.READ_WRITE);
+		// 	oldRightPage.setLeftSiblingId(rightPage.getId());
+		// }
+
+		// rightPage.setRightSiblingId(page.getRightSiblingId());
+		// page.setRightSiblingId(rightPage.getId());
+		// rightPage.setLeftSiblingId(page.getId());
+
+		// // Setting the parent
+		// BTreeInternalPage newParent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
+		// newParent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId())); // Copying midKeyField to
+		// 																						// the parent
+		// updateParentPointers(tid, dirtypages, newParent);
+		
+		// // If the keyField passed is less than or equal to the mid field, then insert tuple to the left leaf page
+		// if(midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
+		// 	return page;
+		// }
+		// return rightPage;
+
+		// Create a new right leaf page
+		BTreeLeafPage newPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+
 		Iterator<Tuple> it = page.reverseIterator();
-		Field midKeyField = page.getTuple(mid).getField(keyField);
-
-		if (it == null) {
-			throw new DbException("Error: No tuples found.");
-		}
-
-		for (int i = 0; i < mid; i++) {
-			if (!it.hasNext()) {
-				throw new DbException("Error: No more tuples found.");
-			}
+		int moveCount = page.getNumTuples() / 2;
+		for (int i = 0; i < moveCount; i++) {
 			Tuple t = it.next();
 			page.deleteTuple(t);
-			rightPage.insertTuple(t);
+			newPage.insertTuple(t);
 		}
 
-		// Setting the ids
 		if (page.getRightSiblingId() != null) {
-			BTreeLeafPage oldRightPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(),
-					Permissions.READ_WRITE);
-			oldRightPage.setLeftSiblingId(rightPage.getId());
+			BTreeLeafPage rightSibling = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(), Permissions.READ_WRITE);
+			rightSibling.setLeftSiblingId(newPage.getId());
 		}
 
-		rightPage.setRightSiblingId(page.getRightSiblingId());
-		page.setRightSiblingId(rightPage.getId());
-		rightPage.setLeftSiblingId(page.getId());
+		newPage.setRightSiblingId(page.getRightSiblingId());
+		page.setRightSiblingId(newPage.getId());
+		newPage.setLeftSiblingId(page.getId());
 
-		// Setting the parent
-		BTreeInternalPage newParent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
-		newParent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId())); // Copying midKeyField to
-																								// the parent
-		updateParentPointers(tid, dirtypages, newParent);
-		
-		// If the keyField passed is less than or equal to the mid field, then insert tuple to the left leaf page
-		if(midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
-			return page;
-		}
-		return rightPage;
+		Field separatorKey = newPage.iterator().next().getField(keyField);
+		BTreeEntry entry = new BTreeEntry(separatorKey, page.getId(), newPage.getId());
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), separatorKey);
+		parent.insertEntry(entry);
+		updateParentPointers(tid, dirtypages, parent);
+
+		return field.compare(Op.GREATER_THAN_OR_EQ, separatorKey) ? newPage : page;
 	}
 
 	/**
@@ -459,41 +512,66 @@ public class BTreeFile implements DbFile {
 		// will be useful here. Return the page into which an entry with the given key
 		// field
 		// should be inserted.
-		BTreeInternalPage rightPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
-		Iterator<BTreeEntry> it = page.reverseIterator();
-		int numEntries = page.getNumEntries();
-		int mid = (int) numEntries / 2;
 
-		if (it == null) {
-			throw new DbException("Error: No entries found.");
-		}
+		// BTreeInternalPage rightPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		// Iterator<BTreeEntry> it = page.reverseIterator();
+		// int numEntries = page.getNumEntries();
+		// int mid = (int) numEntries / 2;
 
-		for (int i = 0; i < mid; i++) {
-			if (!it.hasNext()) {
-				throw new DbException("Error: No more entries found.");
-			}
-			BTreeEntry entry = it.next();
+		// if (it == null) {
+		// 	throw new DbException("Error: No entries found.");
+		// }
+
+		// for (int i = 0; i < mid; i++) {
+		// 	if (!it.hasNext()) {
+		// 		throw new DbException("Error: No more entries found.");
+		// 	}
+		// 	BTreeEntry entry = it.next();
+		// 	page.deleteKeyAndRightChild(entry);
+		// 	rightPage.insertEntry(entry);
+		// }
+
+		// if (!it.hasNext()) {
+		// 	throw new DbException("Error: No more entries found.");
+		// }
+
+		// BTreeEntry midEntry = it.next();
+		// Field midKeyField = midEntry.getKey();
+		// page.deleteKeyAndRightChild(midEntry);
+		// BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
+		// parent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId()));
+
+		// updateParentPointers(tid, dirtypages, parent);
+		// updateParentPointers(tid, dirtypages, rightPage);
+
+		// if (midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
+		// 	return page;
+		// }
+		// return rightPage;
+
+		// Create a new right internal page
+		BTreeInternalPage newPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		Iterator<BTreeEntry> revIt = page.reverseIterator();
+		int moveCount = page.getNumEntries() / 2;
+
+		for (int i = 0; i < moveCount; i++) {
+			BTreeEntry entry = revIt.next();
 			page.deleteKeyAndRightChild(entry);
-			rightPage.insertEntry(entry);
+			newPage.insertEntry(entry);
 		}
 
-		if (!it.hasNext()) {
-			throw new DbException("Error: No more entries found.");
-		}
+		BTreeEntry middle = revIt.next();
+		Field separatorKey = middle.getKey();
+		page.deleteKeyAndRightChild(middle);
 
-		BTreeEntry midEntry = it.next();
-		Field midKeyField = midEntry.getKey();
-		page.deleteKeyAndRightChild(midEntry);
-		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKeyField);
-		parent.insertEntry(new BTreeEntry(midKeyField, page.getId(), rightPage.getId()));
+		BTreeEntry newEntry = new BTreeEntry(separatorKey, page.getId(), newPage.getId());
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), separatorKey);
+		parent.insertEntry(newEntry);
 
 		updateParentPointers(tid, dirtypages, parent);
-		updateParentPointers(tid, dirtypages, rightPage);
+		updateParentPointers(tid, dirtypages, newPage);
 
-		if (midKeyField.compare(Op.GREATER_THAN_OR_EQ, field)) {
-			return page;
-		}
-		return rightPage;
+		return field.compare(Op.GREATER_THAN_OR_EQ, separatorKey) ? newPage : page;
 	}
 
 	/**
@@ -814,22 +892,37 @@ public class BTreeFile implements DbFile {
 		// that the tuples are evenly distributed. Be sure to update
 		// the corresponding parent entry.
 
-		int totalTuples = page.getNumTuples() + sibling.getNumTuples();
-		int tuplesToSteal = (totalTuples / 2) - page.getNumTuples(); // bring to half
+		// int total = page.getNumTuples() + sibling.getNumTuples();
+		// int target = total / 2;
+		// int toMove = target - page.getNumTuples();
 
-		Iterator<Tuple> iterator = isRightSibling ? sibling.iterator() : sibling.reverseIterator();
+		// Iterator<Tuple> iter = isRightSibling ? sibling.iterator() : sibling.reverseIterator();
 
-		for (int i = 0; i < tuplesToSteal && iterator.hasNext(); i++) {
-			Tuple t = iterator.next();
-			sibling.deleteTuple(t);
-			page.insertTuple(t); // maintains order
+		// for (int i = 0; i < toMove && iter.hasNext(); i++) {
+		// 	Tuple t = iter.next();
+		// 	sibling.deleteTuple(t);
+		// 	page.insertTuple(t);
+		// }
+
+		// // Update parent key based on new smallest key in right sibling
+		// Tuple newFirst = isRightSibling ? sibling.iterator().next() : page.iterator().next();
+		// entry.setKey(newFirst.getField(page.keyField));
+		// parent.updateEntry(entry);
+
+		Iterator<Tuple> iter = isRightSibling ? sibling.iterator() : sibling.reverseIterator();
+		int numToSteal = (sibling.getNumTuples() - page.getNumTuples()) / 2;
+		Tuple moved = null;
+
+		for (int i = 0; i < numToSteal; i++) {
+			moved = iter.next();
+			sibling.deleteTuple(moved);
+			page.insertTuple(moved);
 		}
 
-		// parent key to reflect new smallest key in right page
-		Tuple firstTuple = isRightSibling ? sibling.iterator().next() : page.iterator().next();
-		entry.setKey(firstTuple.getField(page.keyField));
-		parent.updateEntry(entry);
-
+		if (moved != null) {
+			entry.setKey(moved.getField(keyField));
+			parent.updateEntry(entry);
+		}
 	}
 
 	/**
@@ -923,34 +1016,62 @@ public class BTreeFile implements DbFile {
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
 
-		Iterator<BTreeEntry> reverseIter = leftSibling.reverseIterator();
+		// // Step 1: Pull the last entry from the left sibling
+		// Iterator<BTreeEntry> revIt = leftSibling.reverseIterator();
+		// if (!revIt.hasNext()) {
+		// 	throw new DbException("Left sibling has no entries to steal from.");
+		// }
+	
+		// int moveCount = (leftSibling.getNumEntries() - page.getNumEntries()) / 2;
+	
+		// // Step 2: Get first right child in `page` to link correctly
+		// BTreePageId firstRightChild = page.iterator().hasNext()
+		// 	? page.iterator().next().getLeftChild()
+		// 	: null;
+	
+		// BTreeEntry entry = null;
+		// for (int i = 0; i < moveCount && revIt.hasNext(); i++) {
+		// 	entry = revIt.next();
+		// 	leftSibling.deleteKeyAndRightChild(entry);
+	
+		// 	if (i == moveCount - 1) {
+		// 		// This is the last entry we move — use parentEntry key as rotation point
+		// 		BTreeEntry newEntry = new BTreeEntry(
+		// 			parentEntry.getKey(),
+		// 			entry.getRightChild(), // becomes left child
+		// 			firstRightChild        // becomes right child
+		// 		);
+		// 		page.insertEntry(newEntry);
+	
+		// 		// Now update parent entry key with the last moved sibling entry's key
+		// 		parentEntry.setKey(entry.getKey());
+		// 		parent.updateEntry(parentEntry);
+		// 	} else {
+		// 		// Regular entry: shift from sibling to page
+		// 		page.insertEntry(entry);
+		// 	}
+		// }
+	
+		// // Step 3: Update all parent pointers of new children in page
+		// updateParentPointers(tid, dirtypages, page);
 
-		int entriesToSteal = (leftSibling.getNumEntries() - page.getNumEntries()) / 2;
-
-		// insert pulled-down parent entry
-		if (reverseIter.hasNext()) {
-			BTreeEntry siblingEntry = reverseIter.next();
-
-			BTreePageId newRightChild = page.iterator().next().getLeftChild();
-			BTreeEntry parentPulledEntry = new BTreeEntry(parentEntry.getKey(), siblingEntry.getRightChild(),
-					newRightChild);
-
-			page.insertEntry(parentPulledEntry);
-
-			int count = 1;
-			while (count < entriesToSteal && reverseIter.hasNext()) {
-				leftSibling.deleteKeyAndRightChild(siblingEntry);
-				page.insertEntry(siblingEntry);
-				siblingEntry = reverseIter.next();
-				count++;
-			}
-
-			// last moved entry
-			leftSibling.deleteKeyAndRightChild(siblingEntry);
-			parentEntry.setKey(siblingEntry.getKey());
-			parent.updateEntry(parentEntry);
+		Iterator<BTreeEntry> iter = leftSibling.reverseIterator();
+		int numToSteal = (leftSibling.getNumEntries() - page.getNumEntries()) / 2;
+	
+		BTreeEntry pulled = iter.next();
+		BTreeEntry rotated = new BTreeEntry(parentEntry.getKey(), pulled.getRightChild(), page.iterator().next().getLeftChild());
+		page.insertEntry(rotated);
+	
+		for (int i = 0; i < numToSteal - 1; i++) {
+			leftSibling.deleteKeyAndRightChild(pulled);
+			page.insertEntry(pulled);
+			pulled = iter.next();
 		}
-
+	
+		leftSibling.deleteKeyAndRightChild(pulled);
+		parentEntry.setKey(pulled.getKey());
+		parent.updateEntry(parentEntry);
+	
 		updateParentPointers(tid, dirtypages, page);
 	}
 
@@ -985,35 +1106,60 @@ public class BTreeFile implements DbFile {
 		// the corresponding parent entry. Be sure to update the parent
 		// pointers of all children in the entries that were moved.
 
-		Iterator<BTreeEntry> entryIterator = rightSibling.iterator();
-		int entriesToMove = (rightSibling.getNumEntries() - page.getNumEntries()) / 2;
+		// Iterator<BTreeEntry> rightIter = rightSibling.iterator();
+		// if (!rightIter.hasNext()) return;
 
-		// pull down parent entry
-		BTreeEntry firstEntry = entryIterator.next();
-		BTreePageId previousRightChild = page.reverseIterator().next().getRightChild();
+		// // Step 1: Pull the parent entry down
+		// BTreeEntry firstRightEntry = rightIter.next();
+		// BTreePageId leftChild = page.reverseIterator().next().getRightChild();
+		// BTreePageId rightChild = firstRightEntry.getLeftChild();
 
-		// insert new entry combining parent key
-		BTreeEntry pulledDownEntry = new BTreeEntry(
-				parentEntry.getKey(),
-				previousRightChild,
-				firstEntry.getLeftChild());
-		page.insertEntry(pulledDownEntry);
+		// BTreeEntry pulledDown = new BTreeEntry(parentEntry.getKey(), leftChild, rightChild);
+		// page.insertEntry(pulledDown);
 
-		// move entries from the sibling
-		int moved = 1;
-		while (moved < entriesToMove && entryIterator.hasNext()) {
-			rightSibling.deleteKeyAndLeftChild(firstEntry);
-			page.insertEntry(firstEntry);
+		// // Step 2: Move half of the entries
+		// int total = page.getNumEntries() + rightSibling.getNumEntries();
+		// int target = total / 2;
+		// int toMove = target - page.getNumEntries();
 
-			firstEntry = entryIterator.next();
-			moved++;
+		// BTreeEntry nextEntry = firstRightEntry;
+		// for (int i = 0; i < toMove; i++) {
+		// 	rightSibling.deleteKeyAndLeftChild(nextEntry);
+		// 	page.insertEntry(nextEntry);
+
+		// 	if (rightIter.hasNext()) {
+		// 		nextEntry = rightIter.next();
+		// 	} else {
+		// 		break;
+		// 	}
+		// }
+
+		// // Step 3: Replace parent key with remaining entry key
+		// rightSibling.deleteKeyAndLeftChild(nextEntry);
+		// parentEntry.setKey(nextEntry.getKey());
+		// parent.updateEntry(parentEntry);
+
+		// // Step 4: Update parent pointers
+		// updateParentPointers(tid, dirtypages, page);
+		// updateParentPointers(tid, dirtypages, rightSibling);
+
+		Iterator<BTreeEntry> iter = rightSibling.iterator();
+		int numToSteal = (rightSibling.getNumEntries() - page.getNumEntries()) / 2;
+
+		BTreeEntry pulled = iter.next();
+		BTreeEntry rotated = new BTreeEntry(parentEntry.getKey(), page.reverseIterator().next().getRightChild(), pulled.getLeftChild());
+		page.insertEntry(rotated);
+
+		for (int i = 0; i < numToSteal - 1; i++) {
+			rightSibling.deleteKeyAndLeftChild(pulled);
+			page.insertEntry(pulled);
+			pulled = iter.next();
 		}
 
-		rightSibling.deleteKeyAndLeftChild(firstEntry);
-		parentEntry.setKey(firstEntry.getKey());
+		rightSibling.deleteKeyAndLeftChild(pulled);
+		parentEntry.setKey(pulled.getKey());
 		parent.updateEntry(parentEntry);
 
-		// update children pointers
 		updateParentPointers(tid, dirtypages, page);
 
 	}
@@ -1054,7 +1200,32 @@ public class BTreeFile implements DbFile {
 		// merging -
 		// deleteParentEntry() will be useful here
 
-		// move from right to leftPage
+		// // move from right to leftPage
+		// Iterator<Tuple> it = rightPage.iterator();
+		// while (it.hasNext()) {
+		// 	Tuple t = it.next();
+		// 	rightPage.deleteTuple(t);
+		// 	leftPage.insertTuple(t);
+		// }
+
+		// // update sibling pointers
+		// leftPage.setRightSiblingId(rightPage.getRightSiblingId());
+		// if (rightPage.getRightSiblingId() != null) {
+		// 	BTreeLeafPage rightSibling = (BTreeLeafPage) Database.getBufferPool().getPage(
+		// 			tid, rightPage.getRightSiblingId(), Permissions.READ_WRITE);
+		// 	rightSibling.setLeftSiblingId(leftPage.getId());
+		// 	dirtypages.put(rightSibling.getId(), rightSibling);
+		// }
+
+		// // delete entry in parent
+		// deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
+
+		// // rightPage empty
+		// setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+
+		// // dirty pages
+		// dirtypages.put(leftPage.getId(), leftPage);
+		// Move all tuples from the right page to the left page
 		Iterator<Tuple> it = rightPage.iterator();
 		while (it.hasNext()) {
 			Tuple t = it.next();
@@ -1062,23 +1233,16 @@ public class BTreeFile implements DbFile {
 			leftPage.insertTuple(t);
 		}
 
-		// update sibling pointers
-		leftPage.setRightSiblingId(rightPage.getRightSiblingId());
 		if (rightPage.getRightSiblingId() != null) {
-			BTreeLeafPage rightSibling = (BTreeLeafPage) Database.getBufferPool().getPage(
-					tid, rightPage.getRightSiblingId(), Permissions.READ_WRITE);
+			BTreeLeafPage rightSibling = (BTreeLeafPage) getPage(tid, dirtypages,
+					rightPage.getRightSiblingId(), Permissions.READ_WRITE);
 			rightSibling.setLeftSiblingId(leftPage.getId());
-			dirtypages.put(rightSibling.getId(), rightSibling);
 		}
 
-		// delete entry in parent
-		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
+		leftPage.setRightSiblingId(rightPage.getRightSiblingId());
 
-		// rightPage empty
 		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
-
-		// dirty pages
-		dirtypages.put(leftPage.getId(), leftPage);
+		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 	}
 
 	/**
@@ -1120,13 +1284,35 @@ public class BTreeFile implements DbFile {
 		// merging -
 		// deleteParentEntry() will be useful here
 
-		// pull down parent entry to left
-		BTreeEntry pulledEntry = new BTreeEntry(parentEntry.getKey(),
-				leftPage.reverseIterator().next().getRightChild(),
-				rightPage.iterator().next().getLeftChild());
-		leftPage.insertEntry(pulledEntry);
+		// // pull down parent entry to left
+		// BTreeEntry pulledEntry = new BTreeEntry(parentEntry.getKey(),
+		// 		leftPage.reverseIterator().next().getRightChild(),
+		// 		rightPage.iterator().next().getLeftChild());
+		// leftPage.insertEntry(pulledEntry);
 
-		// move entries from rightPage to left
+		// // move entries from rightPage to left
+		// Iterator<BTreeEntry> it = rightPage.iterator();
+		// while (it.hasNext()) {
+		// 	BTreeEntry e = it.next();
+		// 	rightPage.deleteKeyAndLeftChild(e);
+		// 	leftPage.insertEntry(e);
+		// }
+
+		// updateParentPointers(tid, dirtypages, leftPage);
+
+		// deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
+
+		// setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+
+		// dirtypages.put(leftPage.getId(), leftPage);
+
+		// Pull down the parent entry to the left page
+		BTreePageId leftChild = leftPage.reverseIterator().next().getRightChild();
+		BTreePageId rightChild = rightPage.iterator().next().getLeftChild();
+
+		BTreeEntry middle = new BTreeEntry(parentEntry.getKey(), leftChild, rightChild);
+		leftPage.insertEntry(middle);
+
 		Iterator<BTreeEntry> it = rightPage.iterator();
 		while (it.hasNext()) {
 			BTreeEntry e = it.next();
@@ -1134,13 +1320,9 @@ public class BTreeFile implements DbFile {
 			leftPage.insertEntry(e);
 		}
 
-		updateParentPointers(tid, dirtypages, leftPage);
-
-		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
-
 		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
-
-		dirtypages.put(leftPage.getId(), leftPage);
+		updateParentPointers(tid, dirtypages, leftPage);
+		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 
 	}
 
