@@ -97,28 +97,32 @@ public class LockManager {
         }
         return txToPages.get(txnId);
     }
-
-    private boolean detectCycle(TransactionId start) {
+    private boolean detectCycle(TransactionId tid) {
         Set<TransactionId> visited = new HashSet<>();
-        Queue<TransactionId> queue = new LinkedList<>();
-        visited.add(start);
-        queue.add(start);
+        Set<TransactionId> visiting = new HashSet<>();
+        return this.dfs(tid, visiting, visited);
+    }
 
-        while (!queue.isEmpty()) {
-            TransactionId current = queue.poll();
-            if (!waitGraph.containsKey(current)) continue;
+    private boolean dfs(TransactionId curr, Set<TransactionId> visiting, Set<TransactionId> visited) {
+        // Sanity check
+        if(!this.waitGraph.containsKey(curr)) return false; // If node has no neighbours, then cycle detection cannot take place
+        
+        if(visiting.contains(curr)) return true;
 
-            for (TransactionId neighbor : waitGraph.get(current)) {
+        if(visited.contains(curr)) return false;
 
-                if(neighbor.equals(current)) {
-                    continue;
-                }
-                if (!visited.add(neighbor)) {
-                    return true; 
-                }
-                queue.add(neighbor);
+        visiting.add(curr);
+
+        for(TransactionId nextTid : this.waitGraph.get(curr)) {
+            if(nextTid.equals(curr)) continue;
+
+            if(dfs(nextTid, visiting, visited)) {
+                return true;
             }
         }
+        
+        visiting.remove(curr);
+        visited.add(curr);
         return false;
     }
 
