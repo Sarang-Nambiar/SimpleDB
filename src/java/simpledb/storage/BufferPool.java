@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -141,35 +143,8 @@ public class BufferPool {
     // constructor
     private int numPages;
 
-    private class Frame {
-        private Page page;
-        private int timestamp; // Timestamp at which the frame was inserted/updated.
-
-        public Frame(Page page, int timestamp) {
-            this.page = page;
-            this.timestamp = timestamp;
-        }
-
-        public Page get_Page() {
-            return this.page;
-        }
-
-        public int getTimeStamp() {
-            return this.timestamp;
-        }
-
-        public void set_Page(Page p) {
-            this.page = p;
-        }
-
-        public void setTimeStamp(int timestamp) {
-            this.timestamp = timestamp;
-        }
-    }
-
-    private int currTimeStamp = 1;
-    private ConcurrentHashMap<PageId, Frame> pageToFrame;
-    private PriorityQueue<Frame> minHeap;
+    // Map to store buffer pages (preserve original access order) with LRU cache-style implementation
+    private ConcurrentHashMap<PageId, Page> pagePool;
 
     // Lab 3
     private final LockManager lockManager;
@@ -182,15 +157,21 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
-        this.pageToFrame = new ConcurrentHashMap<>();
-        this.minHeap = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getTimeStamp(), p2.getTimeStamp()));
         // Lab 3
         this.lockManager = new LockManager();
+
+        // Mini Buffer Pool -> Store pages for the LRU policy
+        this.pagePool = new ConcurrentHashMap<>();
     }
+
+
+
 
     public static int getPageSize() {
         return pageSize;
     }
+
+
 
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void setPageSize(int pageSize) {
@@ -246,48 +227,40 @@ public class BufferPool {
          * it
          */
 
+         //System.out.printf("[REQUEST] %s requests %s lock on %s\n", tid, perm, pid);
         if (perm == Permissions.READ_ONLY) {
-            this.lockManager.acquireSharedLock(tid, pid);
-        } else if (perm == Permissions.READ_WRITE) {
-            this.lockManager.acquireExclusiveLock(tid, pid);
+            this.lockManager.acquireRead(tid, pid);
+        } else {
+            this.lockManager.acquireWrite(tid, pid);
         }
 
-        // Still necessary to have a simple intrinsic mutex lock to prevent race
-        // conditions for shared/read lock as there's modification
         synchronized (this) {
-            // The retrieved page should be looked up in the buffer pool. If it is present,
-            // it should be returned
-            if (this.pageToFrame.containsKey(pid)) {
-                this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
-                return this.pageToFrame.get(pid).get_Page();
-                // If it is not present, it should be added to the buffer pool and returned.
+            // If the requested page already exists in the page pool/mini BP
+            if (this.pagePool.containsKey(pid)) {
+                Page page = this.pagePool.get(pid);
+                // We will be using .keySet().iterator() later -> it returns PageIds (keys)
+                // in order of the insertion. So it can be used to implement LRU
+                this.pagePool.remove(pid);
+                this.pagePool.put(pid, page);
+                return page;
             } else {
-                // If there is insufficient space in the buffer pool
-                // For this lab, if more than `numPages` requests are made for different pages,
-                // then
-                // instead of implementing an eviction policy, you may throw a DbException.
-                if (this.pageToFrame.size() >= this.numPages) {
+                // Evict a page if our mini BP is full
+                if (this.pagePool.size() >= this.numPages) {
                     this.evictPage();
                 }
-                // See PageId.java. Return the unique tableid hashcode of this PageId
-                int tableId = pid.getTableId();
-                // See Catalog.java. Get the Database file using the table id
-                // Returns the DbFile that can be used to read the contents of the specified
-                // table.
-                DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
-                // See DbFile.java. Read the Page from the Database file.
-                // Read the specified page from disk.
-                // Hint for lab1: You should use the DbFile.readPage method to access pages of a
-                // DbFile.
+
+                DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
                 Page page = dbFile.readPage(pid);
-                // Add to the buffer pool
-                Frame newEntry = new Frame(page, this.currTimeStamp++);
-                this.pageToFrame.put(pid, newEntry);
-                this.minHeap.add(newEntry);
+
+                if (perm == Permissions.READ_WRITE) {
+                    page.markDirty(true, tid);
+                }
+
+                // Insert the new page that is being used into the pool
+                this.pagePool.put(pid, page);
                 return page;
             }
         }
-        // return null;
     }
 
     /**
@@ -315,7 +288,7 @@ public class BufferPool {
          */
 
         // Help a transaction release a lock from a page
-        this.lockManager.releaseOneTransactionLock(tid, pid);
+        this.lockManager.release(tid, pid);
     }
 
     /**
@@ -336,7 +309,7 @@ public class BufferPool {
 
         // Lab3
         // Helps to determine whether a page is already locked by a transaction
-        return this.lockManager.holdsLock(tid, p);
+        return this.lockManager.holds(tid, p);
     }
 
     /**
@@ -350,35 +323,34 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         synchronized (this) {
-            ArrayList<PageId> toRemove = new ArrayList<>();
 
-            for (PageId pid : pageToFrame.keySet()) {
-                Page page = pageToFrame.get(pid).get_Page();
-                TransactionId dirtyTid = page.isDirty();
+            // If this transaction doesnt hold any pages we're g
+            if (this.lockManager.getHeldPages(tid)==null) return;
 
-                if (tid.equals(dirtyTid)) {
-                    if (commit) {
-                        try {
-                            flushPage(pid);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        discardPage(pid);
-                        DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                        Page cleanPage = dbFile.readPage(pid);
-                        Frame refreshed = new Frame(cleanPage, currTimeStamp++);
-                        pageToFrame.put(pid, refreshed);
-                        minHeap.add(refreshed);
+            // Else, we need to start flushing/discarding the pages it does hold depending on
+            // the commit/abort
+            Set<PageId> pageIdsToFlush = this.lockManager.getHeldPages(tid);
+            
+
+            if(commit){
+                for (PageId pageId : pageIdsToFlush) {
+                    try {
+                        this.flushPage(pageId);
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    page.markDirty(false, tid);
+                }
+            } else {
+                for (PageId pageId : pageIdsToFlush) {
+                    this.discardPage(pageId);
                 }
             }
+            // Always release locks
+            lockManager.releaseAll(tid);
         }
-
-        lockManager.releaseAllTransactionLocks(tid);
-
     }
+
+
 
     /**
      * Add a tuple to the specified table on behalf of transaction tid. Will
@@ -431,23 +403,18 @@ public class BufferPool {
 
             // Lab3 -> Double check that pages accessed are marked dirty
             page.markDirty(true, tid);
-
-            // If the page is already in the cache, remove it
-            if (this.pageToFrame.containsKey(page.getId())) {
-                Frame frame = this.pageToFrame.get(page.getId());
-                this.pageToFrame.remove(page.getId());
-                this.minHeap.remove(frame);
-            }
-
-            // If there is no space in the cache/BufferPool, run the eviction policy
-            if (this.pageToFrame.size() >= this.numPages) {
+            
+            // If our mini page pool for LRU DOES NOT HAVE this page and the pool is full, we need to evict a page
+            if (!this.pagePool.containsKey(page.getId()) && this.pagePool.size() >= this.numPages) {
                 this.evictPage();
             }
 
-            // Add the page to the cache
-            Frame newEntry = new Frame(page, this.currTimeStamp++);
-            this.pageToFrame.put(page.getId(), newEntry);
-            this.minHeap.add(newEntry);
+            // Standard stuff to reflect the insertion order
+            // We will be using .keySet().iterator() later -> it returns PageIds (keys)
+            // in order of the insertion. So it can be used to implement LRU
+            this.pagePool.remove(page.getId());
+            // Assign id to the page
+            this.pagePool.put(page.getId(), page);
         }
     }
 
@@ -501,22 +468,18 @@ public class BufferPool {
             // Lab3 -> Double check that pages accessed are marked dirty
             page.markDirty(true, tid);
 
-            // If the page is already in the cache, remove it
-            if (this.pageToFrame.containsKey(page.getId())) {
-                Frame frame = this.pageToFrame.get(page.getId());
-                this.pageToFrame.remove(page.getId());
-                this.minHeap.remove(frame);
-            }
-
-            // If there is no space in the cache/BufferPool, run the eviction policy
-            if (this.pageToFrame.size() >= this.numPages) {
+            // Deletion follows the same logic cuz we're modifying THE PAGE
+            // If our mini page pool for LRU DOES NOT HAVE this page and the pool is full, we need to evict a page
+            if (!this.pagePool.containsKey(page.getId()) && this.pagePool.size() >= this.numPages) {
                 this.evictPage();
             }
 
-            // Add the page to the cache
-            Frame newEntry = new Frame(page, this.currTimeStamp++);
-            this.pageToFrame.put(page.getId(), newEntry);
-            this.minHeap.add(newEntry);
+            // Standard stuff to reflect the insertion order
+            // We will be using .keySet().iterator() later -> it returns PageIds (keys)
+            // in order of the insertion. So it can be used to implement LRU
+            this.pagePool.remove(page.getId());
+            // Assign id to the page
+            this.pagePool.put(page.getId(), page);
         }
 
     }
@@ -527,14 +490,11 @@ public class BufferPool {
      * break simpledb if running in NO STEAL mode.
      */
     public synchronized void flushAllPages() throws IOException {
-        // some code goes here
-        // not necessary for lab1
-        Iterator<ConcurrentHashMap.Entry<PageId, Frame>> i = this.pageToFrame.entrySet().iterator();
-
-        while (i.hasNext()) {
-            this.flushPage(i.next().getKey());
+        for (Page page : this.pagePool.values()) {
+            if (page.isDirty() != null) {
+                this.flushPage(page.getId());
+            }
         }
-
     }
 
     /**
@@ -548,9 +508,11 @@ public class BufferPool {
      */
     public synchronized void discardPage(PageId pid) {
         // some code goes here
-        // not necessary for lab1
-        this.minHeap.remove(this.pageToFrame.get(pid));
-        this.pageToFrame.remove(pid);
+        if (pid == null) { // Sanity check
+            return;
+        }
+        
+        this.pagePool.remove(pid);
     }
 
     /**
@@ -561,18 +523,17 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
-        Page page = this.pageToFrame.get(pid).get_Page();
-        DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        TransactionId tid = page.isDirty();
+        Page page = this.pagePool.get(pid);
 
-        // Checking if the page is not dirty
-        if (tid == null) {
-            return;
+        if (this.pagePool.containsKey(pid)) {
+            TransactionId tid = page.isDirty();
+            
+            if (tid != null) { 
+                DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                file.writePage(page); // Write all changes to the disk
+                page.markDirty(false, null);
+            }
         }
-
-        file.writePage(page);
-        this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
-        page.markDirty(false, tid);
     }
 
     /**
@@ -581,6 +542,11 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        if (this.lockManager.getHeldPages(tid) == null) return;
+
+        for (PageId pid : this.lockManager.getHeldPages(tid)) {
+            this.flushPage(pid);
+        }
     }
 
     /**
@@ -590,21 +556,30 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
-        Iterator<Frame> iterator = minHeap.iterator();
-        while (iterator.hasNext()) {
-            Frame candidate = iterator.next();
-            Page page = candidate.get_Page();
+        Iterator<PageId> it = this.pagePool.keySet().iterator();
 
+        Page toEvict = null;
+
+        while (it.hasNext()) {
+            Page page = this.pagePool.get(it.next());
+
+            // Find the last used clean page
             if (page.isDirty() == null) {
-                PageId pid = page.getId();
-
-                iterator.remove(); // remove from heap
-                pageToFrame.remove(pid); // remove from map
-                return;
+                toEvict = page;
             }
         }
 
-        // if we reach here, all pages are dirty
-        throw new DbException("All pages are dirty, unable to evict any page.");
+        if (toEvict == null) {
+            throw new DbException("No pages to evict.");
+        }
+
+        try {
+            this.flushPage(toEvict.getId());
+        } catch (Exception e) {
+            throw new DbException("Error: Problem occurred while flushing.");
+        }
+        this.pagePool.remove(toEvict.getId());
     }
 }
+
+
