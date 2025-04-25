@@ -113,15 +113,11 @@ public class BTreeTest extends SimpleDbTestBase {
 			// more time to avoid too many deadlock situations
 			Thread.sleep(r.nextInt(POLL_INTERVAL));
 		}
-
-		System.out.println("Bruh");
-		
+				
 		for(int i = 0; i < 800; i++) {
 			BTreeInserter bi = startInserter(bf, getRandomTupleData(), insertedTuples);
 			insertThreads.add(bi);
 		}
-		
-		System.out.println("FInished adding all the thingy");
 
 		// wait for all threads to finish
 		waitForInserterThreads(insertThreads);	
