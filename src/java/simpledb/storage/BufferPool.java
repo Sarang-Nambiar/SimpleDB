@@ -183,7 +183,12 @@ public class BufferPool {
         // some code goes here
         this.numPages = numPages;
         this.pageToFrame = new ConcurrentHashMap<>();
-        this.minHeap = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getTimeStamp(), p2.getTimeStamp()));
+        this.minHeap = new PriorityQueue<>((p1, p2) -> {
+            if (p1 == null && p2 == null) return 0;
+            if (p1 == null) return -1; // null elements come first
+            if (p2 == null) return 1;
+            return Integer.compare(p1.getTimeStamp(), p2.getTimeStamp());
+        });
         // Lab 3
         this.lockManager = new LockManager();
     }
@@ -349,30 +354,17 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
-        synchronized (this) {
-            ArrayList<PageId> toRemove = new ArrayList<>();
+        if(this.lockManager.getTransactionPages(tid) == null) return;
 
-            for (PageId pid : pageToFrame.keySet()) {
-                Page page = pageToFrame.get(pid).get_Page();
-                TransactionId dirtyTid = page.isDirty();
-
-                if (tid.equals(dirtyTid)) {
-                    if (commit) {
-                        try {
-                            flushPage(pid);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        discardPage(pid);
-                        DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                        Page cleanPage = dbFile.readPage(pid);
-                        Frame refreshed = new Frame(cleanPage, currTimeStamp++);
-                        pageToFrame.put(pid, refreshed);
-                        minHeap.add(refreshed);
-                    }
-                    page.markDirty(false, tid);
+        for (PageId pid : this.lockManager.getTransactionPages(tid)) {
+            if (commit) {
+                try {
+                    flushPage(pid);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
+            } else {
+                discardPage(pid);
             }
         }
 
@@ -438,6 +430,9 @@ public class BufferPool {
                 this.pageToFrame.remove(page.getId());
                 this.minHeap.remove(frame);
             }
+
+            // this.minHeap = new PriorityQueue<>();
+            // this.minHeap.addAll(this.pageToFrame.values());
 
             // If there is no space in the cache/BufferPool, run the eviction policy
             if (this.pageToFrame.size() >= this.numPages) {
@@ -549,6 +544,10 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        if(pid == null) {
+            return;
+        }
+
         this.minHeap.remove(this.pageToFrame.get(pid));
         this.pageToFrame.remove(pid);
     }
@@ -561,18 +560,20 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
-        Page page = this.pageToFrame.get(pid).get_Page();
-        DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        TransactionId tid = page.isDirty();
-
-        // Checking if the page is not dirty
-        if (tid == null) {
-            return;
+        if(this.pageToFrame.containsKey(pid)) {
+            Page page = this.pageToFrame.get(pid).get_Page();
+            DbFile file = Database.getCatalog().getDatabaseFile(pid.getTableId());
+            TransactionId tid = page.isDirty();
+    
+            // Checking if the page is not dirty
+            if (tid == null) {
+                return;
+            }
+    
+            file.writePage(page);
+            this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
+            page.markDirty(false, tid);
         }
-
-        file.writePage(page);
-        this.pageToFrame.get(pid).setTimeStamp(this.currTimeStamp++);
-        page.markDirty(false, tid);
     }
 
     /**
@@ -591,20 +592,24 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1
         Iterator<Frame> iterator = minHeap.iterator();
+        Frame toEvict = null;
         while (iterator.hasNext()) {
             Frame candidate = iterator.next();
             Page page = candidate.get_Page();
 
             if (page.isDirty() == null) {
-                PageId pid = page.getId();
-
-                iterator.remove(); // remove from heap
-                pageToFrame.remove(pid); // remove from map
-                return;
+                toEvict = candidate;
+                break;
             }
         }
 
-        // if we reach here, all pages are dirty
-        throw new DbException("All pages are dirty, unable to evict any page.");
+        if(toEvict == null) {
+            // if we reach here, all pages are dirty
+            throw new DbException("All pages are dirty, unable to evict any page.");
+        } else {
+            this.pageToFrame.remove(toEvict.get_Page().getId());
+            this.minHeap.remove(toEvict);
+        }
+
     }
 }
